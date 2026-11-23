@@ -5,10 +5,12 @@
     <RootNamespace>NientumCustomCharts</RootNamespace>
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Version>1.0.2-exp</Version>
     <!-- 游戏安装目录，构建时通过 -p:GameDir="..." 传入 -->
     <GameDir Condition="'$(GameDir)' == ''"></GameDir>
     <ManagedDir>$(GameDir)\Nientum_Data\Managed</ManagedDir>
-    <BepInExCore>$(GameDir)\BepInEx\core</BepInExCore>
+    <!-- 默认用游戏内的 BepInEx；也可用 -p:BepInExCore="..." 指向别处的 core 目录 -->
+    <BepInExCore Condition="'$(BepInExCore)' == ''">$(GameDir)\BepInEx\core</BepInExCore>
   </PropertyGroup>
 
   <Target Name="RequireGameDir" BeforeTargets="PrepareForBuild" Condition="'$(GameDir)' == ''">
@@ -66,7 +68,5 @@
     </Reference>
   </ItemGroup>
 
-  <Target Name="CopyToPlugins" AfterTargets="Build" Condition="'$(GameDir)' != '' and Exists('$(GameDir)\BepInEx\plugins')">
-    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(GameDir)\BepInEx\plugins" />
-  </Target>
+  <!-- 实验版不自动覆盖游戏目录，构建产物保留在 bin\Release，通过安装脚本切换 -->
 </Project>

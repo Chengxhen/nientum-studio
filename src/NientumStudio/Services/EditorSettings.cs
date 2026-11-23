@@ -32,6 +32,9 @@ namespace NientumStudio.Services
         public double PreviewScale { get; set; } = 1.0;
         public int MaxFps { get; set; } = 0;
         public string RenderQuality { get; set; } = "high";
+        // 实验版功能开关
+        public bool ShowProjectionBox { get; set; } = true;
+        public bool ShowProjectionLines { get; set; } = true;
 
         public static string FilePath => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ui_settings.json");
 

@@ -573,14 +573,23 @@ namespace NientumStudio.Controls
 
             if (tool == EditorTool.Select)
             {
-                if ((Keyboard.Modifiers & ModifierKeys.Control) == 0) SelectedIndices.Clear();
-                OnSelectionChanged?.Invoke(-1);
-                _dragMode = DragMode.BoxSelect;
-                _dragStartPt = pt;
-                _dragCurPt = pt;
-                CaptureMouse();
-                InvalidateVisual();
-                return;
+                // 选择模式下：左键双击空中/地面轨道空白处直接添加标准单音，单击拖动仍为框选
+                int? dblLane = GetLaneFromY(pt.Y, h);
+                if (e.ClickCount >= 2 && dblLane.HasValue && dblLane.Value >= 0 && !ActiveLayerLocked)
+                {
+                    tool = EditorTool.Crystal;
+                }
+                else
+                {
+                    if ((Keyboard.Modifiers & ModifierKeys.Control) == 0) SelectedIndices.Clear();
+                    OnSelectionChanged?.Invoke(-1);
+                    _dragMode = DragMode.BoxSelect;
+                    _dragStartPt = pt;
+                    _dragCurPt = pt;
+                    CaptureMouse();
+                    InvalidateVisual();
+                    return;
+                }
             }
 
             if (ActiveLayerLocked) return;

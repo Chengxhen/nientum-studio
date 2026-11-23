@@ -149,6 +149,7 @@ namespace NientumStudio.Models
 
         public static readonly string[] GroundOptions = { "Default (默认)", "Thin (细轨)", "None (无地面)" };
         public static readonly string[] CameraOptions = { "Default", "Up", "Down", "ZoomInDefault", "ZoomInUp", "ZoomInDown", "ZoomOutDefault", "ZoomOutUp", "ZoomOutDown" };
+        public static readonly string[] CameraEaseOptions = { "OutCubic (平滑)", "OutExpo (极速爆发)", "Linear (匀速)", "InOutQuad (缓入缓出)", "OutBack (回弹张力)" };
         public static readonly string[] AngleOptions = { "Zero (0°)", "Plus_1 (+5°)", "Plus_2 (+10°)", "Plus_3 (+20°)", "Plus_4 (+30°)", "Minus_1 (-5°)", "Minus_2 (-10°)", "Minus_3 (-20°)", "Minus_4 (-30°)" };
         public static readonly string[] MoodOptions = { "Quiet (平静)", "Regular (常规)", "Climax (高潮)" };
         public static readonly string[] SpeedPresetOptions = { "Regular (常规)", "Dash (冲刺)" };
@@ -177,13 +178,14 @@ namespace NientumStudio.Models
         public const double JudgeGreat = 0.20;
     }
 
-    /// <summary>编辑器图层：相互独立的 BPM / 流速 / 可见性；仅用于编辑与预览，不改变游戏内全局速度。</summary>
+    /// <summary>编辑器图层：相互独立的 BPM / 流速 / 来袭方向 / 可见性；仅用于编辑与预览，不改变游戏内全局速度。</summary>
     public sealed class ChartLayer
     {
         public string Name { get; set; } = "主谱";
         public string Color { get; set; } = "#2CC6C0";
         public double Speed { get; set; } = 1.0;
         public double Bpm { get; set; } = 0;   // 0 = 跟随谱面事件 BPM
+        public double Angle { get; set; } = 0; // 实验版：右边来袭斜角（-75°~+75°，0=水平直轨，正=右上俯冲，负=右下攀升）
         public bool Visible { get; set; } = true;
         public double Opacity { get; set; } = 1.0;
         public bool Locked { get; set; }

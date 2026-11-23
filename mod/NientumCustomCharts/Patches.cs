@@ -215,12 +215,17 @@ namespace NientumCustomCharts
         // 4. Ingame Chart Loading Patches
         // ---------------------------------------------------------
 
+        private static bool _ingameAudioLoadFailed;
+
         [HarmonyPatch(typeof(StageMapLoader), nameof(StageMapLoader.LoadFreePlay))]
         [HarmonyPrefix]
         private static void LoadFreePlay_Prefix(string key, int difficulty)
         {
             ChartBuilder.PendingChartPath = null;
             ChartBuilder.PendingOffsetSec = 0f;
+            _ingameAudioLoadFailed = false;
+            AngledTrackController.Clear();
+            CustomCameraController.Clear();
 
             if (CustomTrackManager.TryGetEntry(key, out var entry))
             {
@@ -231,7 +236,11 @@ namespace NientumCustomCharts
                     FieldOfflineData?.SetValue(null, new byte[] { 1 });
                     ChartBuilder.PendingChartPath = chartPath;
                     ChartBuilder.PendingOffsetSec = (entry.Meta?.offsetMs ?? 0f) / 1000f;
-                    Plugin.Log?.LogInfo($"[Ingame] Preparing custom chart: {chartPath}");
+                    DiagLog.Info($"[Ingame] LoadFreePlay key={key}, diff={difficulty}, chart={chartPath}");
+                }
+                else
+                {
+                    DiagLog.Error($"[Ingame] LoadFreePlay key={key}, diff={difficulty} has NO chart file!");
                 }
             }
         }
@@ -246,11 +255,14 @@ namespace NientumCustomCharts
             float offset = ChartBuilder.PendingOffsetSec;
             ChartBuilder.PendingChartPath = null;
             ChartBuilder.PendingOffsetSec = 0f;
+            AngledTrackController.Clear();
+            CustomCameraController.Clear();
 
             if (__instance is LioraPlayDataReader reader)
             {
                 bool ok = ChartBuilder.PopulateFromFile(reader, path, offset);
                 __result = ok ? CRAPlayDataBase.EPlayDataReadError.None : CRAPlayDataBase.EPlayDataReadError.SignatureNotMatch;
+                if (!ok) DiagLog.Error($"[Ingame] DoPlayDataReader failed for: {path}");
                 return false;
             }
             return true;
@@ -265,6 +277,9 @@ namespace NientumCustomCharts
         private static void SetBGM_Postfix(string bgmName)
         {
             _activeIngameCustomKey = CustomTrackManager.IsCustomTrack(bgmName) ? bgmName : null;
+            _ingameAudioLoadFailed = false;
+            if (_activeIngameCustomKey != null)
+                DiagLog.Info($"[Ingame] SetBGM active custom key={_activeIngameCustomKey}");
         }
 
         [HarmonyPatch(typeof(StageSoundController), nameof(StageSoundController.IsBgmLoad), MethodType.Getter)]
@@ -273,7 +288,8 @@ namespace NientumCustomCharts
         {
             if (_activeIngameCustomKey != null)
             {
-                __result = FmodAudioEngine.HasIngameBgm;
+                // 若音频加载已明确失败，不再返回 false 导致加载协程无限死锁卡死
+                __result = FmodAudioEngine.HasIngameBgm || _ingameAudioLoadFailed;
                 return false;
             }
             return true;
@@ -288,11 +304,18 @@ namespace NientumCustomCharts
             {
                 _activeIngameCustomKey = bgmName;
                 string audioPath = entry.GetAudioPath();
-                FmodAudioEngine.LoadIngame(audioPath);
+                DiagLog.Info($"[Ingame] LoadBGM start key={bgmName}, audioPath={audioPath ?? "(null)"}");
+                bool ok = FmodAudioEngine.LoadIngame(audioPath);
+                _ingameAudioLoadFailed = !ok;
+                if (!ok)
+                {
+                    DiagLog.Error($"[Ingame] LoadBGM FAILED (will proceed without blocking load screen): audioPath={audioPath ?? "(null)"}");
+                }
                 __result = EmptyCoroutine();
                 return false;
             }
             _activeIngameCustomKey = null;
+            _ingameAudioLoadFailed = false;
             return true;
         }
 
@@ -459,6 +482,18 @@ namespace NientumCustomCharts
             }
             FmodAudioEngine.SetIngameVolume(to);
             if (stopAtEnd) FmodAudioEngine.StopIngame();
+        }
+
+        // ---------------------------------------------------------
+        // 6. Experimental: Angled Track Layer Support (IngameScene)
+        // ---------------------------------------------------------
+
+        [HarmonyPatch(typeof(IngameScene), "LateUpdate")]
+        [HarmonyPostfix]
+        private static void IngameScene_LateUpdate_Postfix(IngameScene __instance)
+        {
+            AngledTrackController.UpdateScene(__instance);
+            CustomCameraController.UpdateScene(__instance);
         }
     }
 }

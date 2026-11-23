@@ -20,14 +20,23 @@ namespace NientumStudio.Audio
             CREATESTREAM = 0x00000080,
             CREATESAMPLE = 0x00000100,
             OPENMEMORY = 0x00000800,
+            OPENONLY = 0x00002000,
             ACCURATETIME = 0x00004000
+        }
+
+        private enum OUTPUTTYPE : int
+        {
+            AUTODETECT = 0,
+            NOSOUND = 2,
+            NOSOUND_NRT = 4
         }
 
         private enum TIMEUNIT : uint
         {
             MS = 0x00000001,
             PCM = 0x00000002,
-            PCMBYTES = 0x00000004
+            PCMBYTES = 0x00000004,
+            RAWBYTES = 0x00000008
         }
 
         private enum SOUND_FORMAT
@@ -81,35 +90,40 @@ namespace NientumStudio.Audio
             public IntPtr fsbguid;
         }
 
-        [DllImport(Dll)] private static extern int FMOD5_System_Create(out IntPtr system, uint headerversion);
-        [DllImport(Dll)] private static extern int FMOD5_System_Release(IntPtr system);
-        [DllImport(Dll)] private static extern int FMOD5_System_SetDSPBufferSize(IntPtr system, uint bufferlength, int numbuffers);
-        [DllImport(Dll)] private static extern int FMOD5_System_Init(IntPtr system, int maxchannels, uint flags, IntPtr extradriverdata);
-        [DllImport(Dll)] private static extern int FMOD5_System_Update(IntPtr system);
-        [DllImport(Dll)] private static extern int FMOD5_System_GetMasterChannelGroup(IntPtr system, out IntPtr channelgroup);
-        [DllImport(Dll)] private static extern int FMOD5_System_CreateChannelGroup(IntPtr system, byte[] name, out IntPtr channelgroup);
-        [DllImport(Dll)] private static extern int FMOD5_System_CreateSound(IntPtr system, byte[] nameOrData, MODE mode, ref CREATESOUNDEXINFO exinfo, out IntPtr sound);
-        [DllImport(Dll)] private static extern int FMOD5_System_CreateStream(IntPtr system, byte[] nameOrData, MODE mode, ref CREATESOUNDEXINFO exinfo, out IntPtr sound);
-        [DllImport(Dll)] private static extern int FMOD5_System_PlaySound(IntPtr system, IntPtr sound, IntPtr channelgroup, bool paused, out IntPtr channel);
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int FMOD5_System_Create(out IntPtr system, uint headerversion);
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int FMOD5_System_Release(IntPtr system);
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int FMOD5_System_SetOutput(IntPtr system, OUTPUTTYPE output);
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int FMOD5_System_SetDSPBufferSize(IntPtr system, uint bufferlength, int numbuffers);
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int FMOD5_System_SetStreamBufferSize(IntPtr system, uint filebuffersize, TIMEUNIT filebuffersizetype);
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int FMOD5_System_Init(IntPtr system, int maxchannels, uint flags, IntPtr extradriverdata);
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int FMOD5_System_Update(IntPtr system);
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int FMOD5_System_GetMasterChannelGroup(IntPtr system, out IntPtr channelgroup);
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int FMOD5_System_CreateChannelGroup(IntPtr system, byte[] name, out IntPtr channelgroup);
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int FMOD5_System_CreateSound(IntPtr system, byte[] nameOrData, MODE mode, ref CREATESOUNDEXINFO exinfo, out IntPtr sound);
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int FMOD5_System_CreateSound(IntPtr system, byte[] nameOrData, MODE mode, IntPtr exinfo, out IntPtr sound);
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int FMOD5_System_CreateStream(IntPtr system, byte[] nameOrData, MODE mode, IntPtr exinfo, out IntPtr sound);
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int FMOD5_System_PlaySound(IntPtr system, IntPtr sound, IntPtr channelgroup, bool paused, out IntPtr channel);
 
-        [DllImport(Dll)] private static extern int FMOD5_ChannelGroup_Stop(IntPtr channelgroup);
-        [DllImport(Dll)] private static extern int FMOD5_ChannelGroup_Release(IntPtr channelgroup);
-        [DllImport(Dll)] private static extern int FMOD5_ChannelGroup_IsPlaying(IntPtr channelgroup, out bool isplaying);
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int FMOD5_ChannelGroup_Stop(IntPtr channelgroup);
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int FMOD5_ChannelGroup_Release(IntPtr channelgroup);
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int FMOD5_ChannelGroup_IsPlaying(IntPtr channelgroup, out bool isplaying);
 
-        [DllImport(Dll)] private static extern int FMOD5_Sound_Release(IntPtr sound);
-        [DllImport(Dll)] private static extern int FMOD5_Sound_GetMode(IntPtr sound, out MODE mode);
-        [DllImport(Dll)] private static extern int FMOD5_Sound_GetLength(IntPtr sound, out uint length, TIMEUNIT lengthtype);
-        [DllImport(Dll)] private static extern int FMOD5_Sound_GetFormat(IntPtr sound, out int type, out SOUND_FORMAT format, out int channels, out int bits);
-        [DllImport(Dll)] private static extern int FMOD5_Sound_Lock(IntPtr sound, uint offset, uint length, out IntPtr ptr1, out IntPtr ptr2, out uint len1, out uint len2);
-        [DllImport(Dll)] private static extern int FMOD5_Sound_Unlock(IntPtr sound, IntPtr ptr1, IntPtr ptr2, uint len1, uint len2);
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int FMOD5_Sound_Release(IntPtr sound);
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int FMOD5_Sound_GetMode(IntPtr sound, out MODE mode);
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int FMOD5_Sound_GetLength(IntPtr sound, out uint length, TIMEUNIT lengthtype);
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int FMOD5_Sound_GetFormat(IntPtr sound, out int type, out SOUND_FORMAT format, out int channels, out int bits);
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int FMOD5_Sound_Lock(IntPtr sound, uint offset, uint length, out IntPtr ptr1, out IntPtr ptr2, out uint len1, out uint len2);
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int FMOD5_Sound_Unlock(IntPtr sound, IntPtr ptr1, IntPtr ptr2, uint len1, uint len2);
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int FMOD5_Sound_ReadData(IntPtr sound, byte[] buffer, uint length, out uint read);
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int FMOD5_Sound_SeekData(IntPtr sound, uint pcm);
 
-        [DllImport(Dll)] private static extern int FMOD5_Channel_Stop(IntPtr channel);
-        [DllImport(Dll)] private static extern int FMOD5_Channel_SetPaused(IntPtr channel, bool paused);
-        [DllImport(Dll)] private static extern int FMOD5_Channel_SetPosition(IntPtr channel, uint position, TIMEUNIT postype);
-        [DllImport(Dll)] private static extern int FMOD5_Channel_GetPosition(IntPtr channel, out uint position, TIMEUNIT postype);
-        [DllImport(Dll)] private static extern int FMOD5_Channel_SetVolume(IntPtr channel, float volume);
-        [DllImport(Dll)] private static extern int FMOD5_Channel_SetPitch(IntPtr channel, float pitch);
-        [DllImport(Dll)] private static extern int FMOD5_Channel_IsPlaying(IntPtr channel, out bool isplaying);
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int FMOD5_Channel_Stop(IntPtr channel);
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int FMOD5_Channel_SetPaused(IntPtr channel, bool paused);
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int FMOD5_Channel_SetPosition(IntPtr channel, uint position, TIMEUNIT postype);
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int FMOD5_Channel_GetPosition(IntPtr channel, out uint position, TIMEUNIT postype);
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int FMOD5_Channel_SetVolume(IntPtr channel, float volume);
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int FMOD5_Channel_SetPitch(IntPtr channel, float pitch);
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int FMOD5_Channel_IsPlaying(IntPtr channel, out bool isplaying);
 
         private IntPtr _system;
         private IntPtr _masterGroup;
@@ -157,7 +171,7 @@ namespace NientumStudio.Audio
                 else
                 {
                     if (FMOD5_System_Create(out _system, FmodHeaderVersion) != 0) return;
-                    FMOD5_System_SetDSPBufferSize(_system, 256, 4);
+                    FMOD5_System_SetDSPBufferSize(_system, 1024, 4);
                     if (FMOD5_System_Init(_system, 64, 0, IntPtr.Zero) != 0) return;
                     _ownsSystem = true;
                 }
@@ -184,14 +198,39 @@ namespace NientumStudio.Audio
             }
         }
 
+        public void LoadSongFromMemory(byte[] wavBytes)
+        {
+            UnloadSong();
+            if (!IsInitialized || wavBytes == null || wavBytes.Length <= 44) return;
+
+            var ex = new CREATESOUNDEXINFO
+            {
+                cbsize = Marshal.SizeOf<CREATESOUNDEXINFO>(),
+                length = (uint)wavBytes.Length
+            };
+            if (FMOD5_System_CreateSound(_system, wavBytes, MODE.OPENMEMORY | MODE.CREATESAMPLE | MODE.LOOP_OFF, ref ex, out _songSound) == 0 && _songSound != IntPtr.Zero)
+            {
+                FMOD5_Sound_GetLength(_songSound, out uint lenMs, TIMEUNIT.MS);
+                DurationSec = Math.Max(1.0, lenMs / 1000.0);
+                FMOD5_System_PlaySound(_system, _songSound, _masterGroup, true, out _songChannel);
+                FMOD5_Channel_SetVolume(_songChannel, _volume);
+                FMOD5_Channel_SetPitch(_songChannel, _pitch);
+                _isPaused = true;
+            }
+        }
+
         public void LoadSong(string filePath)
         {
             UnloadSong();
             if (!IsInitialized || string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) return;
 
+            // 256 KB 流文件缓冲，确保 192kHz/24bit 高码率 FLAC / WAV / MP3 流畅播放不断流
+            FMOD5_System_SetStreamBufferSize(_system, 262144, TIMEUNIT.RAWBYTES);
             byte[] pathBytes = Encoding.UTF8.GetBytes(filePath + "\0");
-            var ex = new CREATESOUNDEXINFO { cbsize = Marshal.SizeOf<CREATESOUNDEXINFO>() };
-            if (FMOD5_System_CreateStream(_system, pathBytes, MODE.CREATESTREAM | MODE.ACCURATETIME, ref ex, out _songSound) == 0 && _songSound != IntPtr.Zero)
+            MODE mode = MODE.CREATESTREAM | MODE.LOOP_OFF;
+            if (filePath.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase))
+                mode |= MODE.ACCURATETIME;
+            if (FMOD5_System_CreateStream(_system, pathBytes, mode, IntPtr.Zero, out _songSound) == 0 && _songSound != IntPtr.Zero)
             {
                 FMOD5_Sound_GetLength(_songSound, out uint lenMs, TIMEUNIT.MS);
                 DurationSec = Math.Max(1.0, lenMs / 1000.0);
@@ -206,72 +245,112 @@ namespace NientumStudio.Audio
         {
             return Task.Run(() =>
             {
-                IntPtr sys = _system;
-                if (_disposed || !IsInitialized || sys == IntPtr.Zero || string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
+                if (_disposed || string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
                     return null;
 
+                IntPtr offSys = IntPtr.Zero;
                 IntPtr tempSound = IntPtr.Zero;
                 try
                 {
-                    byte[] pathBytes = Encoding.UTF8.GetBytes(filePath + "\0");
-                    var ex = new CREATESOUNDEXINFO { cbsize = Marshal.SizeOf<CREATESOUNDEXINFO>() };
-                    if (FMOD5_System_CreateSound(sys, pathBytes, MODE.CREATESAMPLE, ref ex, out tempSound) != 0 || tempSound == IntPtr.Zero)
+                    if (FMOD5_System_Create(out offSys, FmodHeaderVersion) != 0 || offSys == IntPtr.Zero)
+                        return null;
+                    FMOD5_System_SetOutput(offSys, OUTPUTTYPE.NOSOUND);
+                    if (FMOD5_System_Init(offSys, 2, 0, IntPtr.Zero) != 0)
                         return null;
 
-                    FMOD5_Sound_GetFormat(tempSound, out _, out SOUND_FORMAT fmt, out int channels, out int bits);
-                    FMOD5_Sound_GetLength(tempSound, out uint pcmBytes, TIMEUNIT.PCMBYTES);
-                    FMOD5_Sound_GetLength(tempSound, out uint lenMs, TIMEUNIT.MS);
-
-                    if (pcmBytes == 0 || channels <= 0 || lenMs == 0) return null;
-
-                    int totalBuckets = Math.Clamp((int)(lenMs / 1000.0 * bucketsPerSecond), 600, 120000);
-                    float[] peaks = new float[totalBuckets];
-
-                    if (FMOD5_Sound_Lock(tempSound, 0, pcmBytes, out IntPtr p1, out IntPtr p2, out uint l1, out uint l2) == 0 && p1 != IntPtr.Zero && l1 > 0)
+                    byte[] pathBytes = Encoding.UTF8.GetBytes(filePath + "\0");
+                    // 1. 快路径：独立离线 System + CREATESAMPLE（正常音频 0.1~0.4 秒出全高清波形）
+                    if (FMOD5_System_CreateSound(offSys, pathBytes, MODE.CREATESAMPLE, IntPtr.Zero, out tempSound) == 0 && tempSound != IntPtr.Zero)
                     {
-                        try
+                        FMOD5_Sound_GetFormat(tempSound, out _, out SOUND_FORMAT fmt, out int channels, out int bits);
+                        FMOD5_Sound_GetLength(tempSound, out uint pcmBytes, TIMEUNIT.PCMBYTES);
+                        FMOD5_Sound_GetLength(tempSound, out uint lenMs, TIMEUNIT.MS);
+                        if (pcmBytes > 0 && channels > 0 && lenMs > 0)
                         {
-                            int bytesPerSample = Math.Max(1, bits / 8);
-                            int frameSize = bytesPerSample * channels;
-                            long totalFrames = l1 / frameSize;
-                            if (totalFrames > 0)
+                            int totalBuckets = Math.Clamp((int)(lenMs / 1000.0 * bucketsPerSecond), 600, 120000);
+                            float[] peaks = new float[totalBuckets];
+                            if (FMOD5_Sound_Lock(tempSound, 0, pcmBytes, out IntPtr p1, out IntPtr p2, out uint l1, out uint l2) == 0 && p1 != IntPtr.Zero && l1 > 0)
                             {
-                                byte[] raw = new byte[l1];
-                                Marshal.Copy(p1, raw, 0, (int)l1);
-                                for (int b = 0; b < totalBuckets; b++)
+                                try
                                 {
-                                    long f0 = (long)b * totalFrames / totalBuckets;
-                                    long f1 = Math.Max(f0 + 1, (long)(b + 1) * totalFrames / totalBuckets);
-                                    long step = Math.Max(1, (f1 - f0) / 16);
-                                    float max = 0f;
-                                    for (long f = f0; f < f1 && f < totalFrames; f += step)
+                                    int bps = Math.Max(1, bits / 8);
+                                    int fs = bps * channels;
+                                    long totalFrames = l1 / fs;
+                                    if (totalFrames > 0)
                                     {
-                                        int idx = (int)(f * frameSize);
-                                        float sample = 0f;
-                                        if (fmt == SOUND_FORMAT.PCM16 && idx + 1 < raw.Length)
+                                        byte[] raw = new byte[l1];
+                                        Marshal.Copy(p1, raw, 0, (int)l1);
+                                        for (int b = 0; b < totalBuckets; b++)
                                         {
-                                            sample = Math.Abs(BitConverter.ToInt16(raw, idx) / 32768f);
+                                            long f0 = (long)b * totalFrames / totalBuckets;
+                                            long f1 = Math.Max(f0 + 1, (long)(b + 1) * totalFrames / totalBuckets);
+                                            long step = Math.Max(1, (f1 - f0) / 16);
+                                            float max = 0f;
+                                            for (long f = f0; f < f1 && f < totalFrames; f += step)
+                                            {
+                                                int frameBase = (int)(f * fs);
+                                                for (int ch = 0; ch < channels; ch++)
+                                                {
+                                                    float s = ReadSampleAbs(raw, frameBase + ch * bps, fmt);
+                                                    if (s > max) max = s;
+                                                }
+                                            }
+                                            peaks[b] = Math.Min(1f, max);
                                         }
-                                        else if (fmt == SOUND_FORMAT.PCMFLOAT && idx + 3 < raw.Length)
-                                        {
-                                            sample = Math.Abs(BitConverter.ToSingle(raw, idx));
-                                        }
-                                        else if (fmt == SOUND_FORMAT.PCM8 && idx < raw.Length)
-                                        {
-                                            sample = Math.Abs((raw[idx] - 128) / 128f);
-                                        }
-                                        if (sample > max) max = sample;
                                     }
-                                    peaks[b] = Math.Min(1f, max);
+                                }
+                                finally
+                                {
+                                    FMOD5_Sound_Unlock(tempSound, p1, p2, l1, l2);
                                 }
                             }
+                            return peaks;
                         }
-                        finally
-                        {
-                            FMOD5_Sound_Unlock(tempSound, p1, p2, l1, l2);
-                        }
+                        FMOD5_Sound_Release(tempSound);
+                        tempSound = IntPtr.Zero;
                     }
-                    return peaks;
+
+                    // 2. 兜底快抽样：针对超大文件或有损坏帧的非标文件，流式跳跃抽样（限 2.5 秒上限，保证快速出波形）
+                    if (FMOD5_System_CreateStream(offSys, pathBytes, MODE.OPENONLY | MODE.CREATESTREAM, IntPtr.Zero, out tempSound) != 0 || tempSound == IntPtr.Zero)
+                        return null;
+
+                    FMOD5_Sound_GetFormat(tempSound, out _, out SOUND_FORMAT fmt2, out int ch2, out int bits2);
+                    FMOD5_Sound_GetLength(tempSound, out uint totalPcm, TIMEUNIT.PCM);
+                    FMOD5_Sound_GetLength(tempSound, out uint lenMs2, TIMEUNIT.MS);
+                    if (ch2 <= 0 || lenMs2 == 0 || totalPcm == 0) return null;
+
+                    int bps2 = Math.Max(1, bits2 / 8);
+                    int fs2 = bps2 * ch2;
+                    if (fs2 <= 0) return null;
+
+                    int sampleCount = Math.Clamp((int)(lenMs2 / 1000.0 * 3), 120, 240);
+                    float[] peaks2 = new float[sampleCount];
+                    byte[] buf = new byte[128 * fs2];
+                    var sw = System.Diagnostics.Stopwatch.StartNew();
+
+                    for (int b = 0; b < sampleCount && !_disposed; b++)
+                    {
+                        if (sw.ElapsedMilliseconds > 3000) break;
+                        uint targetPcm = (uint)Math.Min(totalPcm - 1, (long)b * totalPcm / sampleCount);
+                        FMOD5_Sound_SeekData(tempSound, targetPcm);
+                        FMOD5_Sound_ReadData(tempSound, buf, (uint)buf.Length, out uint bytesRead);
+                        if (bytesRead == 0) continue;
+
+                        int framesRead = (int)(bytesRead / fs2);
+                        int stride = Math.Max(1, framesRead / 8);
+                        float max = 0f;
+                        for (int f = 0; f < framesRead; f += stride)
+                        {
+                            int frameBase = f * fs2;
+                            for (int ch = 0; ch < ch2; ch++)
+                            {
+                                float s = ReadSampleAbs(buf, frameBase + ch * bps2, fmt2);
+                                if (s > max) max = s;
+                            }
+                        }
+                        peaks2[b] = Math.Min(1f, max);
+                    }
+                    return peaks2;
                 }
                 catch
                 {
@@ -280,8 +359,27 @@ namespace NientumStudio.Audio
                 finally
                 {
                     if (tempSound != IntPtr.Zero) FMOD5_Sound_Release(tempSound);
+                    if (offSys != IntPtr.Zero) FMOD5_System_Release(offSys);
                 }
             });
+        }
+
+        private static float ReadSampleAbs(byte[] buf, int idx, SOUND_FORMAT fmt)
+        {
+            if (fmt == SOUND_FORMAT.PCM16 && idx + 1 < buf.Length)
+                return Math.Abs(BitConverter.ToInt16(buf, idx) / 32768f);
+            if (fmt == SOUND_FORMAT.PCM24 && idx + 2 < buf.Length)
+            {
+                int v = buf[idx] | (buf[idx + 1] << 8) | ((sbyte)buf[idx + 2] << 16);
+                return Math.Abs(v / 8388608f);
+            }
+            if (fmt == SOUND_FORMAT.PCM32 && idx + 3 < buf.Length)
+                return Math.Abs(BitConverter.ToInt32(buf, idx) / 2147483648f);
+            if (fmt == SOUND_FORMAT.PCMFLOAT && idx + 3 < buf.Length)
+                return Math.Abs(BitConverter.ToSingle(buf, idx));
+            if (fmt == SOUND_FORMAT.PCM8 && idx < buf.Length)
+                return Math.Abs((buf[idx] - 128) / 128f);
+            return 0f;
         }
 
         public void Play(double fromSec)

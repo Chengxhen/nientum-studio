@@ -88,8 +88,8 @@ namespace NientumStudio.Services
                 else if (tn == "CRAFormatDataEventSpeed")
                 {
                     double sp = o.Value<double?>("fSpeedValue") ?? 1.0;
-                    if (sp < 0.1 || sp > 5.0)
-                        report.Issues.Add(new ChartIssue { Level = IssueLevel.Warning, Category = "速度", Message = $"卷轴速度 @ {t:F2}s 的值 {sp:F2} 超出 0.1-5.0 范围" });
+                    if (sp < 0.01 || sp > 999.0)
+                        report.Issues.Add(new ChartIssue { Level = IssueLevel.Warning, Category = "速度", Message = $"卷轴速度 @ {t:F2}s 的值 {sp:F2} 超出 0.01-999.0 范围" });
                 }
                 else if (tn == "CRAFormatDataFFChangeTheme")
                 {

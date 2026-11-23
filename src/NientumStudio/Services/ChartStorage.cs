@@ -12,7 +12,7 @@ namespace NientumStudio.Services
 {
     public static class ChartStorage
     {
-        // 便携包：exe 同目录带 unpacked 素材；开发环境：使用 e:\Nientum
+        // 便携包：exe 同目录带 unpacked 素材；否则回退到程序目录
         public static readonly string WorkspaceRoot = ResolveWorkspaceRoot();
         public static readonly string CustomChartsDir = Path.Combine(WorkspaceRoot, "CustomCharts");
         public static readonly string OfficialJsonDir = Path.Combine(WorkspaceRoot, "unpacked", "charts_json");
@@ -21,11 +21,8 @@ namespace NientumStudio.Services
 
         private static string ResolveWorkspaceRoot()
         {
-            string baseDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
-            if (File.Exists(Path.Combine(baseDir, "portable.txt")) || Directory.Exists(Path.Combine(baseDir, "unpacked")))
-                return baseDir;
-            if (Directory.Exists(@"e:\Nientum")) return @"e:\Nientum";
-            return baseDir;
+            // 便携包与开发环境一致：素材与 exe 同目录（unpacked\...）
+            return AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
         }
 
         static ChartStorage()

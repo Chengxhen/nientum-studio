@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.InteropServices;
 using FMOD;
 using FMODUnity;
 using QGCore;
@@ -36,6 +37,25 @@ namespace NientumCustomCharts
             }
         }
 
+        private static RESULT CreateSoundFromAudioFile(FMOD.System sys, string audioPath, MODE extraMode, out Sound sound)
+        {
+            byte[] wavBytes = MediaFoundationDecoder.DecodeToWav48k16BitStereo(audioPath);
+            if (wavBytes != null && wavBytes.Length > 44)
+            {
+                var ex = new CREATESOUNDEXINFO
+                {
+                    cbsize = Marshal.SizeOf<CREATESOUNDEXINFO>(),
+                    length = (uint)wavBytes.Length
+                };
+                RESULT memRes = sys.createSound(wavBytes, MODE.OPENMEMORY | MODE.CREATESAMPLE | extraMode, ref ex, out sound);
+                if (memRes == RESULT.OK)
+                    return RESULT.OK;
+                Plugin.Log?.LogWarning($"[Audio] OPENMEMORY failed ({memRes}), falling back to createStream: {audioPath}");
+            }
+
+            return sys.createStream(audioPath, MODE.CREATESTREAM | MODE.ACCURATETIME | extraMode, out sound);
+        }
+
         public static void StartPreview(string audioPath, float startSec)
         {
             StopPreview();
@@ -44,7 +64,7 @@ namespace NientumCustomCharts
             try
             {
                 var sys = RuntimeManager.CoreSystem;
-                RESULT res = sys.createStream(audioPath, MODE.CREATESTREAM | MODE.ACCURATETIME | MODE.LOOP_NORMAL, out _previewSound);
+                RESULT res = CreateSoundFromAudioFile(sys, audioPath, MODE.LOOP_NORMAL, out _previewSound);
                 if (res != RESULT.OK)
                 {
                     Plugin.Log?.LogError($"[Audio] Failed to create preview stream ({res}): {audioPath}");
@@ -114,7 +134,7 @@ namespace NientumCustomCharts
             try
             {
                 var sys = RuntimeManager.CoreSystem;
-                RESULT res = sys.createStream(audioPath, MODE.CREATESTREAM | MODE.ACCURATETIME, out _ingameSound);
+                RESULT res = CreateSoundFromAudioFile(sys, audioPath, MODE.DEFAULT, out _ingameSound);
                 if (res != RESULT.OK)
                 {
                     Plugin.Log?.LogError($"[Audio] Failed to create ingame stream ({res}): {audioPath}");
@@ -242,6 +262,7 @@ namespace NientumCustomCharts
         {
             StopPreview();
             ReleaseIngame();
+            MediaFoundationDecoder.ClearCache();
         }
     }
 }

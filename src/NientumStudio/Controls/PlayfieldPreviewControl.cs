@@ -32,10 +32,34 @@ namespace NientumStudio.Controls
         public Func<double> GetLayerBpm { get; set; }
         /// <summary>独占模式：仅显示并允许编辑当前图层</summary>
         public Func<bool> IsSoloActiveLayer { get; set; }
+        /// <summary>实验版：是否为“人物直轨水平投影基准框”（把所有斜轨音符投影到直线上）。</summary>
+        public bool IsProjectionBox { get; set; }
+        /// <summary>实验版：主预览中是否绘制斜轨虚线垂线与基准直线影子框。</summary>
+        public Func<bool> GetShowProjectionLines { get; set; }
         private double Off => GetOffsetSec?.Invoke() ?? 0;
         private double Disp(double raw) => raw + Off;
         public Action<double, int> OnGridPlaceNote { get; set; }
         public Action<double, int> OnGridDeleteNote { get; set; }
+
+        private static Color ParseLayerColor(string hex)
+        {
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(hex) && ColorConverter.ConvertFromString(hex) is Color c)
+                    return c;
+            }
+            catch { }
+            return Color.FromRgb(44, 198, 192);
+        }
+
+        private double ActiveLayerAngle()
+        {
+            var layers = GetLayers?.Invoke();
+            int idx = GetActiveLayerIndex?.Invoke() ?? 0;
+            if (layers != null && idx >= 0 && idx < layers.Count)
+                return Math.Clamp(layers[idx].Angle, -180.0, 180.0);
+            return 0.0;
+        }
 
         private double LayerOpacityFor(JObject o)
         {
@@ -50,7 +74,7 @@ namespace NientumStudio.Controls
             var layers = GetLayers?.Invoke();
             int idx = GetActiveLayerIndex?.Invoke() ?? 0;
             if (layers != null && idx >= 0 && idx < layers.Count)
-                return Math.Clamp(layers[idx].Speed, 0.25, 4.0);
+                return Math.Clamp(layers[idx].Speed, 0.01, 999.0);
             return 1.0;
         }
 
@@ -83,6 +107,8 @@ namespace NientumStudio.Controls
             public double Speed;
             public int Theme, Ground, Angle, Mood;
             public double JumpMax;
+            public double CamX, CamY, CamZ;
+            public int CamEase;
         }
 
         private List<CachedNote> _cacheNotes;
@@ -270,8 +296,22 @@ namespace NientumStudio.Controls
             public int MoodPreset = 1;
             public bool IsStopped;
             public double JumpHeight = -1; // >=0 表示正在大跳
+            public double CamX, CamY, CamZ;
             public double CurrentBpm = 120.0;
             public List<(double time, double bpm, int beat)> Bpms;
+        }
+
+        private static double EvalCamEase(double u, int ease)
+        {
+            u = Math.Clamp(u, 0.0, 1.0);
+            return ease switch
+            {
+                1 => u >= 1.0 ? 1.0 : 1.0 - Math.Pow(2.0, -10.0 * u), // OutExpo
+                2 => u, // Linear
+                3 => u < 0.5 ? 2.0 * u * u : 1.0 - Math.Pow(-2.0 * u + 2.0, 2.0) / 2.0, // InOutQuad
+                4 => 1.0 + 2.70158 * Math.Pow(u - 1.0, 3.0) + 1.70158 * Math.Pow(u - 1.0, 2.0), // OutBack
+                _ => 1.0 - Math.Pow(1.0 - u, 3.0) // OutCubic
+            };
         }
 
         private static double GetAngleDegrees(int preset) => preset switch
@@ -346,6 +386,18 @@ namespace NientumStudio.Controls
                     case "CRAFormatDataFFChangeAnglePreset":
                         _cacheEvents.Add(new CachedEvent { Type = tn, Time = o.GetTime(), Angle = o.Value<int?>("eFFAnglePreset") ?? 0 });
                         break;
+                    case "CRAFormatDataFFChangeCameraPreset":
+                        _cacheEvents.Add(new CachedEvent
+                        {
+                            Type = tn,
+                            Time = o.GetTime(),
+                            End = o.GetEndTime(),
+                            CamX = o.Value<double?>("camOffsetX") ?? 0.0,
+                            CamY = o.Value<double?>("camOffsetY") ?? 0.0,
+                            CamZ = o.Value<double?>("camOffsetZ") ?? 0.0,
+                            CamEase = o.Value<int?>("camEase") ?? 0
+                        });
+                        break;
                     case "CRAFormatDataFFChangeMoodPreset":
                         _cacheEvents.Add(new CachedEvent { Type = tn, Time = o.GetTime(), Mood = o.Value<int?>("eFFMoodPreset") ?? 1 });
                         break;
@@ -392,6 +444,17 @@ namespace NientumStudio.Controls
                             break;
                         case "CRAFormatDataSuperJumpBody":
                             if (t <= playTime && playTime <= Disp(e.End)) s.JumpHeight = e.JumpMax;
+                            break;
+                        case "CRAFormatDataFFChangeCameraPreset":
+                            if (t <= playTime)
+                            {
+                                double tEnd = Disp(e.End);
+                                double dur = Math.Max(0.05, tEnd - t);
+                                double u = playTime >= tEnd ? 1.0 : EvalCamEase((playTime - t) / dur, e.CamEase);
+                                s.CamX += (e.CamX - s.CamX) * u;
+                                s.CamY += (e.CamY - s.CamY) * u;
+                                s.CamZ += (e.CamZ - s.CamZ) * u;
+                            }
                             break;
                     }
                 }
@@ -487,8 +550,8 @@ namespace NientumStudio.Controls
         private (double judgeX, double groundY, double airY, double pxPerSec) GetMetrics(double w, double h, double speed)
         {
             double judgeX = Math.Round(w * 0.17);
-            double groundY = Math.Round(h * 0.76);
-            double airY = Math.Round(h * 0.36);
+            double groundY = IsProjectionBox ? Math.Round(h * 0.76) : Math.Round(h * 0.76);
+            double airY = IsProjectionBox ? Math.Round(h * 0.43) : Math.Round(h * 0.36);
             double basePx = GetPxPerSec?.Invoke() ?? Math.Max(150, w * 0.42);
             double pxPerSec = Math.Max(80, basePx) * Math.Max(0.3, speed / 1.2);
             return (judgeX, groundY, airY, pxPerSec);
@@ -504,18 +567,40 @@ namespace NientumStudio.Controls
             EnsureChartCache(items);
             var snap = BuildSnapshot(playTime);
             var (judgeX, groundY, airY, pxPerSec) = GetMetrics(w, h, snap.Speed);
-            double tiltDeg = GetAngleDegrees(snap.AnglePreset) * 0.45;
-            if (Math.Abs(tiltDeg) > 0.1)
+            if (!IsProjectionBox)
             {
-                double rad = -tiltDeg * Math.PI / 180.0;
-                double dx = pos.X - judgeX, dy = pos.Y - groundY;
-                pos = new Point(judgeX + dx * Math.Cos(rad) - dy * Math.Sin(rad),
-                                groundY + dx * Math.Sin(rad) + dy * Math.Cos(rad));
+                double tiltDeg = GetAngleDegrees(snap.AnglePreset) * 0.45;
+                if (Math.Abs(tiltDeg) > 0.1)
+                {
+                    double rad = -tiltDeg * Math.PI / 180.0;
+                    double dx = pos.X - judgeX, dy = pos.Y - groundY;
+                    pos = new Point(judgeX + dx * Math.Cos(rad) - dy * Math.Sin(rad),
+                                    groundY + dx * Math.Sin(rad) + dy * Math.Cos(rad));
+                }
             }
-            double rawT = playTime + (pos.X - judgeX) / pxPerSec / ActiveLayerSpeed();
-            if (rawT < 0) return;
-
-            int lane = pos.Y < (airY + groundY) / 2.0 ? 1 : 0;
+            double actAng = ActiveLayerAngle();
+            double rawT;
+            int lane;
+            if (!IsProjectionBox && Math.Abs(actAng) > 0.1)
+            {
+                double rad = actAng * Math.PI / 180.0;
+                double cosA = Math.Cos(rad), sinA = Math.Sin(rad);
+                double midY = (airY + groundY) * 0.5;
+                double d = (pos.X - judgeX) * cosA - (pos.Y - midY) * sinA;
+                rawT = playTime + d / pxPerSec / ActiveLayerSpeed();
+                if (rawT < 0) return;
+                double pxA = judgeX + d * cosA, pyA = airY - d * sinA;
+                double pxG = judgeX + d * cosA, pyG = groundY - d * sinA;
+                double dA = (pos.X - pxA) * (pos.X - pxA) + (pos.Y - pyA) * (pos.Y - pyA);
+                double dG = (pos.X - pxG) * (pos.X - pxG) + (pos.Y - pyG) * (pos.Y - pyG);
+                lane = dA < dG ? 1 : 0;
+            }
+            else
+            {
+                rawT = playTime + (pos.X - judgeX) / pxPerSec / ActiveLayerSpeed();
+                if (rawT < 0) return;
+                lane = pos.Y < (airY + groundY) / 2.0 ? 1 : 0;
+            }
             if (e.ChangedButton == MouseButton.Right)
                 OnGridDeleteNote?.Invoke(rawT, lane);
             else if (e.ChangedButton == MouseButton.Left)
@@ -575,9 +660,19 @@ namespace NientumStudio.Controls
 
 
             // ================= 背景（缓存层，仅尺寸/主题变化时重建） =================
-            EnsureBackgroundCache(w, h, snap);
-            if (!UseExternalBackground && _bgCache != null)
-                dc.DrawImage(_bgCache, new Rect(0, 0, w, h));
+            if (IsProjectionBox)
+            {
+                var baseC = ThemeManager.PreviewBase;
+                dc.DrawRectangle(BrushOf(baseC), null, new Rect(0, 0, w, h));
+                dc.DrawRectangle(BrushOf(Color.FromArgb((byte)(ThemeManager.IsLight ? 14 : 26), snap.ThemeTint.R, snap.ThemeTint.G, snap.ThemeTint.B)),
+                    null, new Rect(0, 0, w, h));
+            }
+            else
+            {
+                EnsureBackgroundCache(w, h, snap);
+                if (!UseExternalBackground && _bgCache != null)
+                    dc.DrawImage(_bgCache, new Rect(0, 0, w, h));
+            }
 
             // ================= BPM 分格 =================
             int gridDiv = GetGridDiv?.Invoke() ?? 2;
@@ -612,7 +707,7 @@ namespace NientumStudio.Controls
                         bool isBar = isBeat && beatNum % beatsPerBar == 0;
                         if (!isBeat && !isBar && s2 % lineStep != 0) continue;
                         dc.DrawLine(isBar ? penBar : (isBeat ? penBeat : penSub), new Point(x, 16), new Point(x, h - 6));
-                        if (isBar)
+                        if (isBar && !IsProjectionBox)
                         {
                             int barNo = (beatNum / beatsPerBar) + 1;
                             double labelY = x < 340 ? 29 : 5;
@@ -623,13 +718,20 @@ namespace NientumStudio.Controls
                 }
             }
 
-            // ================= 轨道倾角变换（仅影响轨道与音符） =================
-            double tiltDeg = GetAngleDegrees(snap.AnglePreset) * 0.45;
+            // ================= 轨道倾角与自定义镜头变换（投影框始终保持水平直轨） =================
+            bool hasCamTx = !IsProjectionBox && (Math.Abs(snap.CamX) > 0.01 || Math.Abs(snap.CamY) > 0.01 || Math.Abs(snap.CamZ) > 0.01);
+            if (hasCamTx)
+            {
+                double zoomScale = Math.Clamp(1.0 + snap.CamZ * 0.04, 0.45, 2.2);
+                dc.PushTransform(new TranslateTransform(-snap.CamX * 14.0, snap.CamY * 14.0));
+                dc.PushTransform(new ScaleTransform(zoomScale, zoomScale, judgeX, (airY + groundY) * 0.5));
+            }
+            double tiltDeg = IsProjectionBox ? 0.0 : GetAngleDegrees(snap.AnglePreset) * 0.45;
             bool tilted = Math.Abs(tiltDeg) > 0.1;
             if (tilted) dc.PushTransform(new RotateTransform(tiltDeg, judgeX, groundY));
 
             // ================= 轨道与舞台地平线 =================
-            if (snap.GroundPreset != 2)
+            if (!IsProjectionBox && snap.GroundPreset != 2)
             {
                 var floorBrush = new LinearGradientBrush(
                     new GradientStopCollection
@@ -640,7 +742,7 @@ namespace NientumStudio.Controls
                 floorBrush.Freeze();
                 dc.DrawRectangle(floorBrush, null, new Rect(0, groundY, w, Math.Max(0, h - groundY + 40)));
             }
-            switch (snap.GroundPreset)
+            switch (IsProjectionBox ? 0 : snap.GroundPreset)
             {
                 case 2: // None
                     break;
@@ -667,6 +769,44 @@ namespace NientumStudio.Controls
             dc.DrawLine(PenOf(Color.FromArgb(26, ColorAir.R, ColorAir.G, ColorAir.B), 5.0), new Point(0, airY), new Point(w, airY));
             dc.DrawLine(AirPen, new Point(0, airY), new Point(w, airY));
 
+            var layersList = GetLayers?.Invoke();
+            // ================= 实验版：绘制各可见斜行图层的方向导轨 =================
+            if (!IsProjectionBox && layersList != null)
+            {
+                int activeIdx = GetActiveLayerIndex?.Invoke() ?? 0;
+                for (int li = 0; li < layersList.Count; li++)
+                {
+                    var ly = layersList[li];
+                    if (!ly.Visible) continue;
+                    if (IsSoloActiveLayer?.Invoke() == true && li != activeIdx) continue;
+                    double lAng = Math.Clamp(ly.Angle, -180.0, 180.0);
+                    if (Math.Abs(lAng) <= 0.1) continue;
+                    double rad = lAng * Math.PI / 180.0;
+                    double cosA = Math.Cos(rad), sinA = Math.Sin(rad);
+                    Color lc = ParseLayerColor(ly.Color);
+                    bool isAct = li == activeIdx;
+                    var railPen = new Pen(BrushOf(Color.FromArgb((byte)(isAct ? 175 : 95), lc.R, lc.G, lc.B)), isAct ? 1.8 : 1.1)
+                    {
+                        DashStyle = isAct ? new DashStyle(new double[] { 6, 4 }, 0) : DashStyles.Dash
+                    };
+                    railPen.Freeze();
+
+                    double rayLen = Math.Max(w, h) * 1.4;
+                    dc.DrawLine(railPen, new Point(judgeX, groundY), new Point(judgeX + rayLen * cosA, groundY - rayLen * sinA));
+                    dc.DrawLine(railPen, new Point(judgeX, airY), new Point(judgeX + rayLen * cosA, airY - rayLen * sinA));
+
+                    // 在射线上合适位置标出斜轨标签
+                    double labelDist = Math.Min(w * 0.55, Math.Max(90.0, h * 0.38));
+                    double labelX = Math.Clamp(judgeX + labelDist * cosA, 12, Math.Max(12, w - 110));
+                    double refY = Math.Clamp((groundY + airY) * 0.5 - labelDist * sinA, 28, Math.Max(28, h - 46));
+                    var tagFt = TextOf($"{ly.Name} {lAng:+0;-0;0}°", true, 9.5, Color.FromArgb(235, lc.R, lc.G, lc.B), dpi);
+                    dc.DrawRoundedRectangle(BrushOf(Color.FromArgb(190, ThemeManager.PreviewBase.R, ThemeManager.PreviewBase.G, ThemeManager.PreviewBase.B)),
+                        PenOf(Color.FromArgb(140, lc.R, lc.G, lc.B), 0.9),
+                        new Rect(labelX, refY - 9, tagFt.Width + 10, 17), 4, 4);
+                    dc.DrawText(tagFt, new Point(labelX + 5, refY - 7));
+                }
+            }
+
             // ================= 判定线与瞬时命中脉冲 =================
             bool hitPulseGround = false, hitPulseAir = false;
             if (_cacheNotes != null)
@@ -683,7 +823,7 @@ namespace NientumStudio.Controls
             dc.DrawLine(PenOf(Color.FromArgb(40, ThemeManager.PreviewJudgeLine.R, ThemeManager.PreviewJudgeLine.G, ThemeManager.PreviewJudgeLine.B), 6.0),
                 new Point(judgeX, 12), new Point(judgeX, h - 10));
             dc.DrawLine(JudgePen, new Point(judgeX, 12), new Point(judgeX, h - 10));
-            if (ThemeManager.IsGame && SpriteCache.JudgeRhombus != null)
+            if (!IsProjectionBox && ThemeManager.IsGame && SpriteCache.JudgeRhombus != null)
             {
                 dc.DrawImage(SpriteCache.JudgeRhombus, new Rect(judgeX - 7, 10, 14, 14));
             }
@@ -691,79 +831,134 @@ namespace NientumStudio.Controls
             DrawJudgeMarker(dc, judgeX, airY, ColorAir, hitPulseAir);
 
             // ================= 角色 =================
-            double charY = groundY;
-            if (snap.JumpHeight > 0)
+            if (!IsProjectionBox)
             {
-                // 大跳区间内角色悬空（简化抛物线）
-                var body = items?.OfType<JObject>().FirstOrDefault(o => o.GetTypeName() == "CRAFormatDataSuperJumpBody" && Disp(o.GetTime()) <= playTime && playTime <= Disp(o.GetEndTime()));
-                if (body != null)
+                double charY = groundY;
+                if (snap.JumpHeight > 0)
                 {
-                    double t0 = Disp(body.GetTime()), t1 = Disp(body.GetEndTime());
-                    double u = (playTime - t0) / Math.Max(0.01, t1 - t0);
-                    double arc = Math.Sin(Math.PI * Math.Clamp(u, 0, 1));
-                    charY = groundY - arc * (h * 0.22) * Math.Min(1, snap.JumpHeight / 6.0);
+                    // 大跳区间内角色悬空（简化抛物线）
+                    var body = items?.OfType<JObject>().FirstOrDefault(o => o.GetTypeName() == "CRAFormatDataSuperJumpBody" && Disp(o.GetTime()) <= playTime && playTime <= Disp(o.GetEndTime()));
+                    if (body != null)
+                    {
+                        double t0 = Disp(body.GetTime()), t1 = Disp(body.GetEndTime());
+                        double u = (playTime - t0) / Math.Max(0.01, t1 - t0);
+                        double arc = Math.Sin(Math.PI * Math.Clamp(u, 0, 1));
+                        charY = groundY - arc * (h * 0.22) * Math.Min(1, snap.JumpHeight / 6.0);
+                    }
+                }
+                var charSpr = SpriteCache.LioraIcon;
+                double cs = Math.Max(30, h * 0.16);
+                dc.DrawEllipse(BrushOf(Color.FromArgb(60, 0, 0, 0)), null, new Point(judgeX, groundY + 2), cs * 0.34, cs * 0.10);
+                if (charSpr != null)
+                {
+                    dc.PushOpacity(0.92);
+                    dc.DrawImage(charSpr, new Rect(judgeX - cs * 0.32, charY - cs, cs, cs));
+                    dc.Pop();
                 }
             }
-            var charSpr = SpriteCache.LioraIcon;
-            double cs = Math.Max(30, h * 0.16);
-            dc.DrawEllipse(BrushOf(Color.FromArgb(60, 0, 0, 0)), null, new Point(judgeX, groundY + 2), cs * 0.34, cs * 0.10);
-            if (charSpr != null)
-            {
-                dc.PushOpacity(0.92);
-                dc.DrawImage(charSpr, new Rect(judgeX - cs * 0.32, charY - cs, cs, cs));
-                dc.Pop();
-            }
 
-            // ================= 音符（使用轻量缓存，不再每帧解析 JObject） =================
+            // ================= 音符（主预览按斜轨角斜向移动；直轨投影框全部投影至人物移动直线） =================
             if (_cacheNotes != null)
             {
-                double noteSize = Math.Max(24, h * 0.135);
+                double noteSize = IsProjectionBox ? Math.Clamp(h * 0.21, 16, 23) : Math.Max(24, h * 0.135);
                 EnsureNoteGeo(noteSize);
                 double maxDt = (w - judgeX) / pxPerSec + 0.3;
-                var layers = GetLayers?.Invoke();
+                bool showProjLines = !IsProjectionBox && (GetShowProjectionLines?.Invoke() ?? true);
                 foreach (var n in _cacheNotes)
                 {
-                    int layerIdx = Math.Clamp(n.Layer, 0, (layers?.Count ?? 1) - 1);
+                    int layerIdx = Math.Clamp(n.Layer, 0, (layersList?.Count ?? 1) - 1);
                     double layerSpeed = 1.0;
                     double layerOp = 1.0;
-                    if (layers != null && layerIdx < layers.Count)
+                    double layerAngle = 0.0;
+                    Color layerColor = ThemeManager.TimelineGround;
+                    if (layersList != null && layerIdx < layersList.Count)
                     {
-                        if (!layers[layerIdx].Visible) continue;
+                        if (!layersList[layerIdx].Visible) continue;
                         if (IsSoloActiveLayer?.Invoke() == true)
                         {
                             int activeIdx = GetActiveLayerIndex?.Invoke() ?? 0;
                             if (layerIdx != activeIdx) continue;
                         }
-                        layerSpeed = Math.Clamp(layers[layerIdx].Speed, 0.25, 4.0);
-                        layerOp = Math.Clamp(layers[layerIdx].Opacity, 0.2, 1.0);
+                        layerSpeed = Math.Clamp(layersList[layerIdx].Speed, 0.01, 999.0);
+                        layerOp = Math.Clamp(layersList[layerIdx].Opacity, 0.2, 1.0);
+                        layerAngle = Math.Clamp(layersList[layerIdx].Angle, -180.0, 180.0);
+                        layerColor = ParseLayerColor(layersList[layerIdx].Color);
                     }
                     string tName = n.Type;
                     double dt = (Disp(n.Time) - playTime) * layerSpeed;
                     double dtEnd = n.IsLong ? (Disp(n.End) - playTime) * layerSpeed : dt;
                     if (dtEnd < -0.30 || dt > maxDt) continue;
 
-                    double x = judgeX + dt * pxPerSec;
-                    double xEnd = judgeX + dtEnd * pxPerSec;
-                    double y = n.Lane == 1 ? airY : groundY;
+                    double d = dt * pxPerSec;
+                    double dEnd = dtEnd * pxPerSec;
+                    double targetY = n.Lane == 1 ? airY : groundY;
+                    bool isAngled = Math.Abs(layerAngle) > 0.1;
+                    double rad = isAngled ? layerAngle * Math.PI / 180.0 : 0.0;
+                    double cosA = isAngled ? Math.Cos(rad) : 1.0;
+                    double sinA = isAngled ? Math.Sin(rad) : 0.0;
+                    double x = IsProjectionBox ? (judgeX + d) : (judgeX + d * cosA);
+                    double xEnd = IsProjectionBox ? (judgeX + dEnd) : (judgeX + dEnd * cosA);
+                    double y = IsProjectionBox ? targetY : (targetY - d * sinA);
+                    double yEnd = IsProjectionBox ? targetY : (targetY - dEnd * sinA);
                     Color col = n.Color;
                     bool opPushed = layerOp < 0.999;
                     if (opPushed) dc.PushOpacity(layerOp);
 
-                    // 长条身体
-                    if (xEnd > x + 2)
+                    // 主预览中的虚线垂线 + 人物直轨影子锚点
+                    if (showProjLines && isAngled && x >= judgeX - 4 && x <= w + 20)
+                    {
+                        var dropPen = new Pen(BrushOf(Color.FromArgb(125, layerColor.R, layerColor.G, layerColor.B)), 1.0)
+                        { DashStyle = new DashStyle(new double[] { 3, 3 }, 0) };
+                        dropPen.Freeze();
+                        dc.DrawLine(dropPen, new Point(x, y), new Point(x, targetY));
+                        dc.DrawRoundedRectangle(BrushOf(Color.FromArgb(40, layerColor.R, layerColor.G, layerColor.B)),
+                            PenOf(Color.FromArgb(200, layerColor.R, layerColor.G, layerColor.B), 1.1),
+                            new Rect(x - 5.5, targetY - 5.5, 11, 11), 2.5, 2.5);
+                        dc.DrawEllipse(BrushOf(Color.FromArgb(220, layerColor.R, layerColor.G, layerColor.B)), null, new Point(x, targetY), 2.0, 2.0);
+                    }
+
+                    // 直轨投影框内，给来自斜轨的音符外加清晰投影框与角度角标
+                    if (IsProjectionBox && isAngled)
+                    {
+                        double boxR = noteSize * 0.62;
+                        dc.DrawRoundedRectangle(BrushOf(Color.FromArgb(36, layerColor.R, layerColor.G, layerColor.B)),
+                            PenOf(Color.FromArgb(220, layerColor.R, layerColor.G, layerColor.B), 1.25),
+                            new Rect(x - boxR, targetY - boxR, boxR * 2, boxR * 2), 4, 4);
+                    }
+
+                    // 长条身体（支持全方向长条与投影框水平拍平显示）
+                    if (dEnd > d + 2)
                     {
                         var hold = HoldOf(col);
-                        dc.DrawRoundedRectangle(hold.fill, hold.pen,
-                            new Rect(x, y - noteSize * 0.24, Math.Max(8, xEnd - x), noteSize * 0.48), 4, 4);
+                        double holdH = noteSize * 0.48;
+                        if (!IsProjectionBox && (Math.Abs(yEnd - y) > 0.5 || xEnd < x))
+                        {
+                            double hdx = xEnd - x, hdy = yEnd - y;
+                            double len = Math.Sqrt(hdx * hdx + hdy * hdy);
+                            double rotDeg = Math.Atan2(hdy, hdx) * 180.0 / Math.PI;
+                            dc.PushTransform(new TranslateTransform(x, y));
+                            dc.PushTransform(new RotateTransform(rotDeg));
+                            dc.DrawRoundedRectangle(hold.fill, hold.pen, new Rect(0, -holdH / 2, Math.Max(8, len), holdH), 4, 4);
+                            dc.Pop();
+                            dc.Pop();
+                        }
+                        else
+                        {
+                            dc.DrawRoundedRectangle(hold.fill,
+                                IsProjectionBox && isAngled ? PenOf(Color.FromArgb(195, layerColor.R, layerColor.G, layerColor.B), 1.2) : hold.pen,
+                                new Rect(x, y - holdH / 2, Math.Max(8, dEnd - d), holdH), 4, 4);
+                        }
 
                         if (n.IsOrb && n.MidIds != null)
                         {
                             foreach (int midId in n.MidIds)
                             {
                                 if (!_midTimes.TryGetValue(midId, out double mTime)) continue;
-                                double mx = judgeX + (Disp(mTime) - playTime) * pxPerSec * layerSpeed;
-                                if (mx < x || mx > xEnd) continue;
-                                dc.PushTransform(new TranslateTransform(mx, y));
+                                double md = (Disp(mTime) - playTime) * pxPerSec * layerSpeed;
+                                if (md < d || md > dEnd) continue;
+                                double mx = IsProjectionBox ? (judgeX + md) : (judgeX + md * cosA);
+                                double my = IsProjectionBox ? targetY : (targetY - md * sinA);
+                                dc.PushTransform(new TranslateTransform(mx, my));
                                 dc.DrawGeometry(BrushOf(Color.FromRgb(235, 252, 252)), null, _midGeo);
                                 dc.Pop();
                             }
@@ -815,8 +1010,18 @@ namespace NientumStudio.Controls
                     else
                     {
                         dc.PushTransform(new TranslateTransform(x, y));
-                            dc.DrawGeometry(BrushOf(col), PenOf(Colors.White, 1), _diamondGeo);
-                            dc.Pop();
+                        dc.DrawGeometry(BrushOf(col), PenOf(Colors.White, 1), _diamondGeo);
+                        dc.Pop();
+                    }
+
+                    // 直轨投影框下为斜轨音符标注来袭角度芯片
+                    if (IsProjectionBox && isAngled)
+                    {
+                        var angFt = TextOf($"{layerAngle:+0;-0;0}°", true, 8.5, Color.FromArgb(240, layerColor.R, layerColor.G, layerColor.B), dpi);
+                        double bx = x - angFt.Width * 0.5;
+                        double by = n.Lane == 1 ? (targetY - noteSize * 0.65 - 12) : (targetY + noteSize * 0.65 + 1);
+                        by = Math.Clamp(by, 2, h - 13);
+                        dc.DrawText(angFt, new Point(bx, by));
                     }
 
                     // 长条尾巴标记
@@ -828,12 +1033,12 @@ namespace NientumStudio.Controls
                             dc.PushOpacity(0.85);
                         if (tailSpr != null)
                         {
-                            dc.DrawImage(tailSpr, new Rect(xEnd - ts / 2, y - ts / 2, ts, ts));
+                            dc.DrawImage(tailSpr, new Rect(xEnd - ts / 2, yEnd - ts / 2, ts, ts));
                             dc.Pop();
                         }
                         else
                         {
-                            dc.DrawRectangle(Brushes.White, null, new Rect(xEnd - 1.5, y - 8, 3, 16));
+                            dc.DrawRectangle(Brushes.White, null, new Rect(xEnd - 1.5, yEnd - 8, 3, 16));
                         }
                     }
                     if (opPushed) dc.Pop();
@@ -841,20 +1046,20 @@ namespace NientumStudio.Controls
             }
 
             if (tilted) dc.Pop();
+            if (hasCamTx) { dc.Pop(); dc.Pop(); }
 
             // ================= 角标信息 & 判定窗口图例 =================
-            double angleDeg = GetAngleDegrees(snap.AnglePreset);
-            string angleStr = Math.Abs(angleDeg) > 0.1 ? $"   ·   倾角 {angleDeg:+0;-0;0}°" : "";
-            string stopStr = snap.IsStopped ? "   ·   ⏸ 卷轴停顿" : "";
-            string info = $"BPM {snap.CurrentBpm:F0}   ·   卷轴 {snap.Speed:F2}x   ·   主题 {snap.ThemeName}   ·   地面 {ChartConstants.GroundOptions[Math.Clamp(snap.GroundPreset, 0, 2)]}{angleStr}{stopStr}";
-            var infoFt = TextOf(info, false, 10.5, ThemeManager.PreviewInfoText, dpi);
+            string info = IsProjectionBox
+                ? "直轨投影参考框 · 同 X 对齐时刻"
+                : $"BPM {snap.CurrentBpm:F0}   ·   卷轴 {snap.Speed:F2}x   ·   主题 {snap.ThemeName}   ·   地面 {ChartConstants.GroundOptions[Math.Clamp(snap.GroundPreset, 0, 2)]}{(Math.Abs(GetAngleDegrees(snap.AnglePreset)) > 0.1 ? $"   ·   倾角 {GetAngleDegrees(snap.AnglePreset):+0;-0;0}°" : "")}{(snap.IsStopped ? "   ·   ⏸ 卷轴停顿" : "")}";
+            var infoFt = TextOf(info, false, IsProjectionBox ? 9.5 : 10.5, ThemeManager.PreviewInfoText, dpi);
             var infoBg = ThemeManager.PreviewBase;
             Pen pillPen = PenOf(ThemeManager.IsGame ? Color.FromArgb(140, 236, 198, 116) : ThemeManager.TimelineDivider, 1.0);
             dc.DrawRoundedRectangle(BrushOf(Color.FromArgb((byte)(ThemeManager.IsLight ? 226 : 196), infoBg.R, infoBg.G, infoBg.B)), pillPen,
-                new Rect(10, 6, infoFt.Width + 16, 21), 6, 6);
-            dc.DrawText(infoFt, new Point(18, 9));
+                new Rect(10, 4, infoFt.Width + 14, IsProjectionBox ? 18 : 21), 6, 6);
+            dc.DrawText(infoFt, new Point(17, IsProjectionBox ? 6 : 7));
 
-            if (w >= 460 && h >= 140)
+            if (!IsProjectionBox && w >= 460 && h >= 140)
             {
                 var f1 = TextOf("±90ms", true, 9.5, ThemeManager.PreviewLegendText, dpi);
                 var f2 = TextOf("±130ms", true, 9.5, ThemeManager.PreviewLegendText, dpi);

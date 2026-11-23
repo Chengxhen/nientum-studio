@@ -84,10 +84,12 @@ namespace NientumStudio
 
         public MainWindow()
         {
+            AppLog.InitSession();
+            GameLocator.Refresh();
+            AppLog.Info($"Startup GamePath={EditorSettings.Current.GamePath ?? "(empty)"}");
             _officialAudio = new OfficialAudioEngine();
             _fmod = new FmodEngine(_officialAudio.CoreSystem);
             InitializeComponent();
-            GameLocator.Refresh();
             InitEventSelector();
             GameBackdropImage.Source = SpriteCache.PlaylistBg;
             GameBrandIcon.Source = SpriteCache.ButterflyGold;
@@ -113,7 +115,7 @@ namespace NientumStudio
             Timeline.OnSeek = SeekTo;
             Timeline.OnSelectionChanged = _ => BuildInspector();
             // 拖动时每帧只标记脏；体检分析由 160ms 定时器节流，避免编辑卡顿
-            Timeline.OnChartMutated = () => { MarkDirty(); PostStatsUpdate(); Playfield.InvalidateVisual(); RequestRedraw(); };
+            Timeline.OnChartMutated = () => { MarkDirty(); PostStatsUpdate(); InvalidatePreview(); RequestRedraw(); };
             Timeline.OnPushUndo = PushUndo;
 
             _statsTimer.Tick += (_, _) =>
@@ -148,8 +150,24 @@ namespace NientumStudio
             Playfield.GetActiveLayerIndex = () => _activeLayerIndex;
             Playfield.GetLayerBpm = () => ActiveLayerBpm;
             Playfield.IsSoloActiveLayer = () => _soloActiveLayer;
+            Playfield.GetShowProjectionLines = () => ChkProjLines?.IsChecked == true;
             Playfield.OnGridPlaceNote = PlaceNoteFromPlayfield;
             Playfield.OnGridDeleteNote = DeleteNoteFromPlayfield;
+
+            ProjectionBox.GetItems = () => _chart?["items"] as JArray;
+            ProjectionBox.GetPlayTime = () => _playTime;
+            ProjectionBox.GetDefaultBpm = () => _currentSong?.Meta?.bpm ?? 120.0;
+            ProjectionBox.GetCustomGridBpm = GetCustomGridBpm;
+            ProjectionBox.GetBeatsPerBar = GetBeatsPerBar;
+            ProjectionBox.GetGridDiv = GetPreviewGridDiv;
+            ProjectionBox.GetPxPerSec = () => Timeline.PxPerSec;
+            ProjectionBox.GetOffsetSec = () => _offsetSec;
+            ProjectionBox.GetLayers = () => _layers;
+            ProjectionBox.GetActiveLayerIndex = () => _activeLayerIndex;
+            ProjectionBox.GetLayerBpm = () => ActiveLayerBpm;
+            ProjectionBox.IsSoloActiveLayer = () => _soloActiveLayer;
+            ProjectionBox.OnGridPlaceNote = PlaceNoteFromPlayfield;
+            ProjectionBox.OnGridDeleteNote = DeleteNoteFromPlayfield;
 
             Playfield.UseExternalBackground = true;
             Playfield.BackgroundImageChanged += (_, _) => UpdatePreviewBackgrounds();
@@ -176,6 +194,7 @@ namespace NientumStudio
         {
             Timeline.InvalidateTheme();
             Playfield.InvalidateTheme();
+            ProjectionBox?.InvalidateTheme();
             NpsGraph.InvalidateVisual();
             UpdateThemeUi();
             UpdateDiffButtons();
@@ -183,6 +202,12 @@ namespace NientumStudio
             BuildLayersPanel();
             RequestRedraw();
             BuildInspector();
+        }
+
+        private void InvalidatePreview()
+        {
+            Playfield?.InvalidateVisual();
+            ProjectionBox?.InvalidateVisual();
         }
 
         private void UpdateThemeUi()
@@ -217,6 +242,7 @@ namespace NientumStudio
             _hitIndexDirty = true;
             _chartVersion++;
             if (Playfield != null) Playfield.ChartVersion = _chartVersion;
+            if (ProjectionBox != null) ProjectionBox.ChartVersion = _chartVersion;
             if (Timeline != null) Timeline.ChartVersion = _chartVersion;
             if (!_isDirty)
             {
@@ -230,6 +256,7 @@ namespace NientumStudio
             _hitIndexDirty = true;
             _chartVersion++;
             if (Playfield != null) Playfield.ChartVersion = _chartVersion;
+            if (ProjectionBox != null) ProjectionBox.ChartVersion = _chartVersion;
             if (Timeline != null) Timeline.ChartVersion = _chartVersion;
             _isDirty = false;
             UpdateWindowTitle();
@@ -239,8 +266,8 @@ namespace NientumStudio
         {
             string star = _isDirty ? "* " : "";
             Title = _currentSong != null
-                ? $"{star}{_currentSong.DisplayTitle} [{_currentDiff}] - Nientum Studio · 谱面工坊"
-                : $"{star}Nientum Studio · 谱面工坊";
+                ? $"{star}{_currentSong.DisplayTitle} [{_currentDiff}] - Nientum Studio · 实验版（斜轨与直线投影）"
+                : $"{star}Nientum Studio · 实验版（斜轨与直线投影）";
         }
 
         private bool ConfirmDiscardOrSave()
@@ -303,7 +330,7 @@ namespace NientumStudio
                 MarkDirty();
                 PostStatsUpdate();
                 Timeline?.InvalidateVisual();
-                Playfield?.InvalidateVisual();
+                InvalidatePreview();
             }
         }
 
@@ -315,17 +342,14 @@ namespace NientumStudio
                 _offsetSec = double.TryParse(TxtOffsetMs.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out double offsetMs)
                     ? offsetMs / 1000.0 : 0;
                 Timeline?.InvalidateVisual();
-                Playfield?.InvalidateVisual();
+                InvalidatePreview();
                 RequestRedraw();
             }
             if (_loadingSong || _currentSong == null) return;
             MarkDirty();
         }
 
-        private void TxtGridBpm_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            Playfield?.InvalidateVisual();
-        }
+        private void TxtGridBpm_TextChanged(object sender, TextChangedEventArgs e) => InvalidatePreview();
 
         private string GetSelectedEventType()
         {
@@ -432,7 +456,7 @@ namespace NientumStudio
                         TxtBeat.Text = $"Beat {TimeToBeat(_playTime):F2}";
                     }
                     Timeline.InvalidateVisual();
-                    Playfield.InvalidateVisual();
+                    InvalidatePreview();
                     _lastPaintTicks = nowTicks;
                     _uiDirty = false;
                     _fpsFrames++;
@@ -481,7 +505,7 @@ namespace NientumStudio
             float baseVol = Math.Min(1.2f, (float)EditorSettings.Current.HitsoundVolume * 1.15f);
             if (!_officialAudio.PlayGameHit(kind, baseVol * volScale, pitch))
             {
-                if (kind == OfficialAudioEngine.GameHitSound.Normal || kind == OfficialAudioEngine.GameHitSound.LongStart || kind == OfficialAudioEngine.GameHitSound.SuperJump)
+                if (kind != OfficialAudioEngine.GameHitSound.Metronome)
                     _fmod.PlayHitsound(fallbackDodge);
             }
         }
@@ -645,7 +669,7 @@ namespace NientumStudio
                 _officialSeekGuard = 3;
             }
             Timeline.InvalidateVisual();
-            Playfield.InvalidateVisual();
+            InvalidatePreview();
             RequestRedraw();
         }
 
@@ -761,17 +785,45 @@ namespace NientumStudio
             {
                 // 用户自行导入的音频优先（官方副本也允许覆盖官方音轨）
                 _officialAudio.UnloadTrack();
-                _fmod.LoadSong(ownAudioPath);
-                _duration = Math.Max(10.0, _fmod.DurationSec);
-                TxtAudioStatus.Text = $"{m.audioFile} · {_fmod.DurationSec:F1}s";
-                TxtAudioStatus.Foreground = (Brush)FindResource("AccentGround");
-                UpdateStats();
-                var peaks = await _fmod.ExtractWaveformPeaksAsync(ownAudioPath);
-                if (serial == _songLoadSerial && !_closing)
+                TxtAudioStatus.Text = $"{m.audioFile} · 正在解码...";
+                TxtAudioStatus.Foreground = (Brush)FindResource("TextDim");
+
+                var (wavBytes, mfPeaks) = await System.Threading.Tasks.Task.Run(() =>
                 {
-                    _waveform = peaks;
+                    byte[] wav = Audio.MediaFoundationDecoder.DecodeToWav48k16BitStereo(ownAudioPath, out _);
+                    float[] pks = wav != null ? Audio.MediaFoundationDecoder.ExtractPeaksFromWav48k16BitStereo(wav) : null;
+                    return (wav, pks);
+                });
+                if (serial != _songLoadSerial || _closing) return;
+
+                if (wavBytes != null)
+                {
+                    _fmod.LoadSongFromMemory(wavBytes);
+                    _duration = Math.Max(10.0, _fmod.DurationSec);
+                    AppLog.Info($"Audio loaded via MediaFoundation: {ownAudioPath} ({_fmod.DurationSec:F2}s, {wavBytes.Length / 1024}KB)");
+                    TxtAudioStatus.Text = $"{m.audioFile} · {_fmod.DurationSec:F1}s";
+                    TxtAudioStatus.Foreground = (Brush)FindResource("AccentGround");
+                    _waveform = mfPeaks;
+                    UpdateStats();
                     Timeline.InvalidateVisual();
                     RequestRedraw();
+                }
+                else
+                {
+                    // 回退至 FMOD 原生加载（兼容未装 MF 解码器的老系统 OGG）
+                    AppLog.Warn($"MediaFoundation decode returned null, fallback to FMOD stream: {ownAudioPath}");
+                    _fmod.LoadSong(ownAudioPath);
+                    _duration = Math.Max(10.0, _fmod.DurationSec);
+                    TxtAudioStatus.Text = $"{m.audioFile} · {_fmod.DurationSec:F1}s";
+                    TxtAudioStatus.Foreground = (Brush)FindResource("AccentGround");
+                    UpdateStats();
+                    var peaks = await _fmod.ExtractWaveformPeaksAsync(ownAudioPath);
+                    if (serial == _songLoadSerial && !_closing)
+                    {
+                        _waveform = peaks;
+                        Timeline.InvalidateVisual();
+                        RequestRedraw();
+                    }
                 }
             }
             else if (entry.IsOfficial && !string.IsNullOrEmpty(m.officialKey))
@@ -1035,7 +1087,7 @@ namespace NientumStudio
             MarkDirty();
             BuildInspector();
             UpdateStats();
-            Playfield.InvalidateVisual();
+            InvalidatePreview();
             Timeline.InvalidateVisual();
             RequestRedraw();
         }
@@ -1049,7 +1101,7 @@ namespace NientumStudio
             MarkDirty();
             BuildInspector();
             UpdateStats();
-            Playfield.InvalidateVisual();
+            InvalidatePreview();
             Timeline.InvalidateVisual();
             RequestRedraw();
         }
@@ -1452,11 +1504,11 @@ namespace NientumStudio
 
             if (_layers.Count > 1)
             {
-                AddComboField("图层", _layers.Select((l, i) => (i, $"{i + 1}. {l.Name}")).ToArray(), it.GetEditorLayer(), v =>
+                AddComboField("图层", _layers.Select((l, i) => (i, $"{i + 1}. {l.Name}" + (Math.Abs(l.Angle) > 0.1 ? $" ({l.Angle:+0;-0;0}°)" : ""))).ToArray(), it.GetEditorLayer(), v =>
                 {
                     it["editorLayer"] = v;
                     Timeline.InvalidateVisual();
-                    Playfield.InvalidateVisual();
+                    InvalidatePreview();
                     MarkDirty();
                 });
             }
@@ -1574,7 +1626,7 @@ namespace NientumStudio
                     AddNumericField("拍号 iBPMBeat（每小节拍数）", it.Value<int?>("iBPMBeat") ?? 4, v => it["iBPMBeat"] = (int)Math.Clamp(v, 1, 16));
                     break;
                 case "CRAFormatDataEventSpeed":
-                    AddNumericField("卷轴速度倍率", it.Value<double?>("fSpeedValue") ?? 1.2, v => it["fSpeedValue"] = Math.Clamp(v, 0.1, 5.0));
+                    AddNumericField("卷轴速度倍率 (0.01–999)", it.Value<double?>("fSpeedValue") ?? 1.2, v => it["fSpeedValue"] = Math.Clamp(v, 0.01, 999.0));
                     break;
                 case "CRAFormatDataFFChangeTheme":
                     AddIndexedComboField("场景主题（越界会被游戏回退）", ChartConstants.ThemeOptions.Select(x => x.label).ToArray(),
@@ -1585,6 +1637,10 @@ namespace NientumStudio
                     break;
                 case "CRAFormatDataFFChangeCameraPreset":
                     AddIndexedComboField("镜头预设", ChartConstants.CameraOptions, it.Value<int?>("eFFCameraPreset") ?? 0, v => it["eFFCameraPreset"] = v);
+                    AddNumericField("自定义水平偏移 X (-30~+30)", it.Value<double?>("camOffsetX") ?? 0.0, v => it["camOffsetX"] = Math.Clamp(v, -30.0, 30.0));
+                    AddNumericField("自定义垂直偏移 Y (+往上飞/-往下)", it.Value<double?>("camOffsetY") ?? 0.0, v => it["camOffsetY"] = Math.Clamp(v, -30.0, 30.0));
+                    AddNumericField("推拉缩放 Z (+拉近/-拉远)", it.Value<double?>("camOffsetZ") ?? 0.0, v => it["camOffsetZ"] = Math.Clamp(v, -20.0, 20.0));
+                    AddIndexedComboField("过渡缓动曲线 (配合上方持续时间控制快慢)", ChartConstants.CameraEaseOptions, Math.Clamp(it.Value<int?>("camEase") ?? 0, 0, ChartConstants.CameraEaseOptions.Length - 1), v => it["camEase"] = v);
                     break;
                 case "CRAFormatDataFFChangeAnglePreset":
                     AddIndexedComboField("轨道倾角", ChartConstants.AngleOptions, it.Value<int?>("eFFAnglePreset") ?? 0, v => it["eFFAnglePreset"] = v);
@@ -1660,7 +1716,7 @@ namespace NientumStudio
                     committed = tb.Text;
                     UpdateStats();
                     Timeline.InvalidateVisual();
-                    Playfield.InvalidateVisual();
+                    InvalidatePreview();
                 }
             }
             tb.LostFocus += (_, _) => Commit();
@@ -1692,7 +1748,7 @@ namespace NientumStudio
                     apply(v);
                     UpdateStats();
                     Timeline.InvalidateVisual();
-                    Playfield.InvalidateVisual();
+                    InvalidatePreview();
                 }
             };
             InspectorPanel.Children.Add(cb);
@@ -1745,7 +1801,7 @@ namespace NientumStudio
             }
         }
         private void CmbSnap_SelectionChanged(object sender, SelectionChangedEventArgs e) => Timeline?.InvalidateVisual();
-        private void CmbPreviewGrid_SelectionChanged(object sender, SelectionChangedEventArgs e) => Playfield?.InvalidateVisual();
+        private void CmbPreviewGrid_SelectionChanged(object sender, SelectionChangedEventArgs e) => InvalidatePreview();
 
         private void CmbRate_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
@@ -1762,6 +1818,7 @@ namespace NientumStudio
             {
                 Timeline.PxPerSec = e.NewValue;
                 Timeline.InvalidateVisual();
+                InvalidatePreview();
             }
         }
 
@@ -2064,10 +2121,57 @@ namespace NientumStudio
             _activeLayerIndex = n;
             BuildLayersPanel();
             Timeline?.InvalidateVisual();
-            Playfield?.InvalidateVisual();
+            InvalidatePreview();
             UpdateStats();
             MarkDirty();
             SetStatus($"已添加图层 {n + 1}");
+        }
+
+        private void BtnAddAngledLayer_Click(object sender, RoutedEventArgs e)
+        {
+            if (_layers.Count >= 8)
+            {
+                SetStatus("最多支持 8 个图层");
+                return;
+            }
+            int n = _layers.Count;
+            double[] presets = { 30.0, -30.0, 45.0, -45.0, 20.0, -20.0 };
+            double ang = presets[Math.Max(0, n - 1) % presets.Length];
+            _layers.Add(new ChartLayer
+            {
+                Name = $"斜轨 {(ang >= 0 ? "+" : "")}{ang:0}°",
+                Color = LayerPalette[n % LayerPalette.Length],
+                Bpm = 0,
+                Speed = 1.0,
+                Angle = ang,
+                Visible = true
+            });
+            _activeLayerIndex = n;
+            BuildLayersPanel();
+            Timeline?.InvalidateVisual();
+            InvalidatePreview();
+            UpdateStats();
+            MarkDirty();
+            SetStatus($"已添加斜行轨道图层（{ang:+0;-0;0}°），音符按垂直投影对齐人物直线");
+        }
+
+        private void ChkProjOption_Click(object sender, RoutedEventArgs e)
+        {
+            ApplyProjectionVisibility();
+            InvalidatePreview();
+            PersistUiSettings();
+        }
+
+        private void ApplyProjectionVisibility()
+        {
+            bool showBox = ChkProjBox?.IsChecked == true;
+            if (ProjectionHost != null && ProjectionSplitter != null && ProjectionRow != null)
+            {
+                ProjectionHost.Visibility = showBox ? Visibility.Visible : Visibility.Collapsed;
+                ProjectionSplitter.Visibility = showBox ? Visibility.Visible : Visibility.Collapsed;
+                ProjectionRow.MinHeight = showBox ? 72 : 0;
+                ProjectionRow.Height = showBox ? new GridLength(96) : new GridLength(0);
+            }
         }
 
         private void RemoveLayer(int idx)
@@ -2098,7 +2202,7 @@ namespace NientumStudio
             BuildInspector();
             UpdateStats();
             Timeline?.InvalidateVisual();
-            Playfield?.InvalidateVisual();
+            InvalidatePreview();
             MarkDirty();
         }
 
@@ -2129,7 +2233,7 @@ namespace NientumStudio
             if (_soloActiveLayer) CleanTimelineSelectionForActiveLayer();
             BuildLayersPanel();
             Timeline?.InvalidateVisual();
-            Playfield?.InvalidateVisual();
+            InvalidatePreview();
         }
 
         private void CleanTimelineSelectionForActiveLayer()
@@ -2195,7 +2299,7 @@ namespace NientumStudio
                         CleanTimelineSelectionForActiveLayer();
                         BuildLayersPanel();
                         Timeline?.InvalidateVisual();
-                        Playfield?.InvalidateVisual();
+                        InvalidatePreview();
                         UpdateStats();
                     }
                 };
@@ -2217,7 +2321,7 @@ namespace NientumStudio
                     CleanTimelineSelectionForActiveLayer();
                     BuildLayersPanel();
                     Timeline?.InvalidateVisual();
-                    Playfield?.InvalidateVisual();
+                    InvalidatePreview();
                     UpdateStats();
                 };
                 var swatch = new Border
@@ -2263,7 +2367,7 @@ namespace NientumStudio
                     layer.Locked = !layer.Locked;
                     BuildLayersPanel();
                     Timeline?.InvalidateVisual();
-                    Playfield?.InvalidateVisual();
+                    InvalidatePreview();
                     BuildInspector();
                     MarkDirty();
                 };
@@ -2330,7 +2434,7 @@ namespace NientumStudio
                     {
                         layer.Bpm = b;
                         Timeline?.InvalidateVisual();
-                        Playfield?.InvalidateVisual();
+                        InvalidatePreview();
                         UpdateStats();
                         MarkDirty();
                     }
@@ -2351,7 +2455,7 @@ namespace NientumStudio
                     if (double.TryParse(spdBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out double sp) && sp >= 0.25 && sp <= 4.0)
                     {
                         layer.Speed = sp;
-                        Playfield?.InvalidateVisual();
+                        InvalidatePreview();
                         MarkDirty();
                     }
                 };
@@ -2368,7 +2472,7 @@ namespace NientumStudio
                 vis.Click += (_, _) =>
                 {
                     layer.Visible = vis.IsChecked == true;
-                    Playfield?.InvalidateVisual();
+                    InvalidatePreview();
                     MarkDirty();
                 };
                 row2.Children.Add(bpmLbl);
@@ -2406,7 +2510,7 @@ namespace NientumStudio
                     if (!opReady) return;
                     layer.Opacity = Math.Clamp(opSld.Value / 100.0, 0.2, 1.0);
                     opTxt.Text = $"{(int)Math.Round(opSld.Value)}%";
-                    Playfield?.InvalidateVisual();
+                    InvalidatePreview();
                     Timeline?.InvalidateVisual();
                     MarkDirty();
                 };
@@ -2416,13 +2520,87 @@ namespace NientumStudio
                 root.Children.Add(row3);
                 opReady = true;
 
+                // 实验版：图层轨道来袭方向（-180° ~ +180° 全方向，到达判定线时精确重合）
+                var row4 = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 0) };
+                var angLbl = new TextBlock { Text = "方向", FontSize = 10.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) };
+                angLbl.SetResourceReference(TextBlock.ForegroundProperty, "TextDim");
+                var angBox = new TextBox
+                {
+                    Text = $"{Math.Clamp(layer.Angle, -180, 180):+0;-0;0}°",
+                    Width = 42,
+                    FontSize = 10,
+                    Padding = new Thickness(3, 1, 3, 1),
+                    IsEnabled = !locked,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    ToolTip = "全方向来袭角度（-180°~+180°）：0°=右方水平，+90°=正上方，-90°=正下方，±180°=左方来袭"
+                };
+                var angSld = new Slider
+                {
+                    Minimum = -180,
+                    Maximum = 180,
+                    TickFrequency = 15,
+                    Value = Math.Clamp(layer.Angle, -180, 180),
+                    Width = 72,
+                    Margin = new Thickness(4, 0, 4, 0),
+                    IsEnabled = !locked,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    ToolTip = "拖动调整全方向来袭角度（-180° ~ +180°）"
+                };
+                bool angReady = false;
+                void SetLayerAngle(double deg)
+                {
+                    deg = Math.Round(Math.Clamp(deg, -180.0, 180.0));
+                    layer.Angle = deg;
+                    angReady = false;
+                    angSld.Value = deg;
+                    angBox.Text = $"{deg:+0;-0;0}°";
+                    angReady = true;
+                    InvalidatePreview();
+                    MarkDirty();
+                }
+                angSld.ValueChanged += (_, _) =>
+                {
+                    if (!angReady) return;
+                    SetLayerAngle(angSld.Value);
+                };
+                angBox.LostFocus += (_, _) =>
+                {
+                    string raw = (angBox.Text ?? "").Replace("°", "").Trim();
+                    if (double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out double v))
+                        SetLayerAngle(v);
+                    else
+                        angBox.Text = $"{Math.Clamp(layer.Angle, -180, 180):+0;-0;0}°";
+                };
+                row4.Children.Add(angLbl);
+                row4.Children.Add(angSld);
+                row4.Children.Add(angBox);
+                foreach (double preset in new[] { 0.0, 30.0, -30.0 })
+                {
+                    double pVal = preset;
+                    var pb = new Button
+                    {
+                        Content = pVal == 0 ? "0°" : $"{pVal:+0;-0}°",
+                        Width = pVal == 0 ? 22 : 28,
+                        Height = 20,
+                        FontSize = 9.5,
+                        Padding = new Thickness(0),
+                        Margin = new Thickness(2, 0, 0, 0),
+                        IsEnabled = !locked,
+                        ToolTip = pVal == 0 ? "重置为水平直轨" : $"设为 {pVal:+0;-0}° 斜轨"
+                    };
+                    pb.Click += (_, _) => SetLayerAngle(pVal);
+                    row4.Children.Add(pb);
+                }
+                root.Children.Add(row4);
+                angReady = true;
+
                 card.Child = root;
                 LayersPanel.Children.Add(card);
             }
 
             var hint = new TextBlock
             {
-                Text = "锁定后该层与其中音符不可编辑；透明度只影响预览与时间轴的显示。",
+                Text = "调整「方向」可让该层轨道斜向飞入判定框，并在下方“直轨投影框”实时投影到人物水平直线上（X 对齐打击时刻）。",
                 FontSize = 10.5,
                 LineHeight = 17,
                 TextWrapping = TextWrapping.Wrap,
@@ -2444,6 +2622,9 @@ namespace NientumStudio
             ChkMetronome.IsChecked = s.Metronome;
             ChkFollow.IsChecked = s.FollowPlayhead;
             ChkAutoMiddle.IsChecked = s.AutoMiddle;
+            if (ChkProjLines != null) ChkProjLines.IsChecked = s.ShowProjectionLines;
+            if (ChkProjBox != null) ChkProjBox.IsChecked = s.ShowProjectionBox;
+            ApplyProjectionVisibility();
             SetComboTag(CmbSnap, s.SnapDiv);
             SetComboTag(CmbPreviewGrid, s.PreviewGridDiv);
             SetComboTag(CmbRate, s.DefaultRate);
@@ -2456,6 +2637,7 @@ namespace NientumStudio
             _fmod.SetHitsoundVolume((float)s.HitsoundVolume);
             _fmod.SetMetronomeVolume((float)s.MetronomeVolume);
             _officialAudio.SetVolume((float)s.MasterVolume);
+            _officialAudio.ReloadBanksIfNeeded();
             }
             finally
             {
@@ -2464,10 +2646,15 @@ namespace NientumStudio
             ApplyPanelVisibility();
             Playfield.RenderScale = Math.Clamp(s.PreviewScale, 0.5, 1.0);
             Playfield.ApplyRenderQuality(s.RenderQuality != "performance");
+            if (ProjectionBox != null)
+            {
+                ProjectionBox.RenderScale = Math.Clamp(s.PreviewScale, 0.5, 1.0);
+                ProjectionBox.ApplyRenderQuality(s.RenderQuality != "performance");
+            }
             Timeline.ApplyRenderQuality(s.RenderQuality != "performance");
             _maxFps = s.MaxFps;
             Timeline.InvalidateVisual();
-            Playfield.InvalidateVisual();
+            InvalidatePreview();
             RequestRedraw();
         }
 
@@ -2492,6 +2679,8 @@ namespace NientumStudio
             s.Metronome = ChkMetronome.IsChecked == true;
             s.FollowPlayhead = ChkFollow.IsChecked == true;
             s.AutoMiddle = ChkAutoMiddle.IsChecked == true;
+            if (ChkProjLines != null) s.ShowProjectionLines = ChkProjLines.IsChecked == true;
+            if (ChkProjBox != null) s.ShowProjectionBox = ChkProjBox.IsChecked == true;
             s.PanelLibrary = MenuPanelLibrary.IsChecked;
             s.PanelMeta = MenuPanelMeta.IsChecked;
             s.PanelHealth = MenuPanelHealth.IsChecked;
@@ -2959,7 +3148,7 @@ namespace NientumStudio
                         PlayLiveNoteHit(lane, EditorTool.Crystal);
                     UpdateStats();
                     Timeline.InvalidateVisual();
-                    Playfield.InvalidateVisual();
+                    InvalidatePreview();
                 }
             }
             else if (!ctrl && e.Key >= Key.D1 && e.Key <= Key.D8)

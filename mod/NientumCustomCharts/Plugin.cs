@@ -42,6 +42,7 @@ namespace NientumCustomCharts
                 true,
                 "Automatically rescan custom charts whenever entering FreePlay.");
 
+            DiagLog.InitSession();
             // Ensure primary CustomCharts folder exists inside the game directory
             string gameChartsDir = Path.Combine(Paths.GameRootPath, "CustomCharts");
             Directory.CreateDirectory(gameChartsDir);
@@ -52,7 +53,7 @@ namespace NientumCustomCharts
             _harmony.PatchAll(typeof(Patches));
             TryPatchGalleryCompat();
 
-            Log.LogInfo($"{PluginName} v{PluginVersion} loaded! Found {CustomTrackManager.Count} custom chart(s).");
+            DiagLog.Info($"{PluginName} v{PluginVersion} loaded! Found {CustomTrackManager.Count} custom chart(s).");
         }
 
         private void TryPatchGalleryCompat()

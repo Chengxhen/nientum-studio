@@ -113,10 +113,10 @@ namespace NientumStudio.Services
                     _system = IntPtr.Zero;
                     return;
                 }
-                // 低延迟：在 Core 初始化前设置小缓冲（128 samples x 4 ≈ 10.7ms），并启用同步更新
+                // 独立异步音频线程 + 1024x4 DSP 缓冲（~21.3ms/块），彻底消除 192kHz FLAC / 高码率音频受 UI 帧率拖累引起的卡顿与跳帧
                 if (FMOD_Studio_System_GetCoreSystem(_system, out IntPtr coreEarly) == 0 && coreEarly != IntPtr.Zero)
-                    FMOD5_System_SetDSPBufferSize(coreEarly, 128, 4);
-                r = FMOD_Studio_System_Initialize(_system, 64, 0x00000002 /*SYNCHRONOUS_UPDATE*/, 0, IntPtr.Zero);
+                    FMOD5_System_SetDSPBufferSize(coreEarly, 1024, 4);
+                r = FMOD_Studio_System_Initialize(_system, 64, 0 /* 异步音频线程 */, 0, IntPtr.Zero);
                 if (r != 0)
                 {
                     FMOD_Studio_System_Release(_system);
@@ -125,18 +125,79 @@ namespace NientumStudio.Services
                 }
                 if (FMOD_Studio_System_GetCoreSystem(_system, out IntPtr core) == 0)
                     CoreSystem = core;
-                LoadBankFile(Path.Combine(OfficialLibrary.BanksDir, "Master.bank"));
-                _stringsBank = LoadBankFile(Path.Combine(OfficialLibrary.BanksDir, "Master.strings.bank"));
-                IsAvailable = _stringsBank != IntPtr.Zero;
-                if (IsAvailable) EnsureHitSfx(); // 启动即加载游戏命中音效 bank 并预热，避免首次命中卡顿
+                LoadCoreAndSfxBanks();
             }
-            catch
+            catch (Exception ex)
             {
+                AppLog.Error("OfficialAudioEngine init failed", ex);
                 try { if (_system != IntPtr.Zero) FMOD_Studio_System_Release(_system); } catch { }
                 _system = IntPtr.Zero;
                 CoreSystem = IntPtr.Zero;
                 IsAvailable = false;
             }
+        }
+
+        public bool IsHitSfxReady => _sfxReady;
+
+        public void ReloadBanksIfNeeded()
+        {
+            if (_system == IntPtr.Zero) return;
+            if (IsAvailable && _sfxReady) return;
+            LoadCoreAndSfxBanks();
+        }
+
+        private void LoadCoreAndSfxBanks()
+        {
+            if (_stringsBank == IntPtr.Zero)
+            {
+                string masterPath = ResolveBankPath("Master.bank");
+                string stringsPath = ResolveBankPath("Master.strings.bank");
+                if (!string.IsNullOrEmpty(masterPath)) LoadBankFile(masterPath);
+                if (!string.IsNullOrEmpty(stringsPath)) _stringsBank = LoadBankFile(stringsPath);
+                IsAvailable = _stringsBank != IntPtr.Zero;
+                AppLog.Info($"OfficialAudioEngine banks: Master={(masterPath ?? "missing")}, Strings={(stringsPath ?? "missing")}, IsAvailable={IsAvailable}");
+            }
+            if (IsAvailable && !_sfxReady)
+            {
+                _sfxLoadTried = false;
+                EnsureHitSfx();
+                AppLog.Info($"OfficialAudioEngine HitSfx ready={_sfxReady} (count={_hitDescs.Count})");
+            }
+        }
+
+        private static string ResolveBankPath(string fileName)
+        {
+            string local = Path.Combine(OfficialLibrary.BanksDir, fileName);
+            if (File.Exists(local)) return local;
+
+            string gameDir = EditorSettings.Current?.GamePath;
+            if (!string.IsNullOrWhiteSpace(gameDir) && Directory.Exists(gameDir))
+            {
+                string sa = Path.Combine(gameDir, "Nientum_Data", "StreamingAssets");
+                if (Directory.Exists(sa))
+                {
+                    string[] candidates =
+                    {
+                        Path.Combine(sa, fileName),
+                        Path.Combine(sa, "Desktop", fileName),
+                        Path.Combine(sa, "FMODBanks", fileName),
+                        Path.Combine(sa, "Audio", fileName),
+                    };
+                    foreach (string c in candidates)
+                        if (File.Exists(c)) return c;
+
+                    try
+                    {
+                        foreach (string sub in Directory.GetDirectories(sa))
+                        {
+                            string p = Path.Combine(sub, fileName);
+                            if (File.Exists(p)) return p;
+                        }
+                    }
+                    catch { }
+                }
+            }
+            return null;
         }
 
         public (uint bufferLength, int buffers, int sampleRate, int setResult) GetDspInfo()
@@ -472,8 +533,12 @@ namespace NientumStudio.Services
             if (_system == IntPtr.Zero) return false;
             try
             {
-                string path = Path.Combine(OfficialLibrary.BanksDir, SfxBankFile);
-                if (!File.Exists(path)) return false;
+                string path = ResolveBankPath(SfxBankFile);
+                if (string.IsNullOrEmpty(path) || !File.Exists(path))
+                {
+                    AppLog.Warn($"HitSfx bank missing: {SfxBankFile}");
+                    return false;
+                }
                 _sfxBank = LoadBankFile(path);
                 if (_sfxBank == IntPtr.Zero) return false;
 
