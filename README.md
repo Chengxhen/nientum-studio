@@ -59,7 +59,7 @@ CustomCharts\<曲目名>\
 
 ## 发布包
 
-Release 提供 `NientumStudio_Exp-v1_2026.11.22.zip`：自包含编辑器（内置 .NET 运行时）+ 谱面 Mod + BepInEx 框架 + 安装/卸载脚本，解压后运行 `安装.bat` 即可。包含构建好的 exe/dll，不含游戏素材与音乐。
+Release 提供 `NientumStudio_Exp-v1_2026.11.22_rev2.zip`：自包含编辑器（内置 .NET 运行时）+ 谱面 Mod + BepInEx 框架 + 安装/卸载脚本，解压后运行 `安装.bat` 即可。rev2 同步了斜轨、自定义镜头、Media Foundation 解码与诊断日志；不含游戏素材、音频 bank 与音乐。
 
 ## 版权与下架声明
 
