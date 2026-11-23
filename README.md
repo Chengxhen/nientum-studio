@@ -1,5 +1,7 @@
 # NientumStudio 谱面编辑器
 
+English: [README.en.md](README.en.md)
+
 《Nientum - Op.ZERO》自制谱面工具链：WPF 编辑器 + BepInEx 5 游戏内加载 Mod。
 
 本仓库只包含代码。游戏本体、官方谱面、音乐、CG、字体等资源均不包含；游戏内容版权归 QueseraGames 所有。
