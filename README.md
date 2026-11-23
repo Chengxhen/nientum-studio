@@ -61,6 +61,8 @@ CustomCharts\<曲目名>\
 
 Release 提供 `NientumStudio_Exp-v1_2026.11.22_rev2.zip`：自包含编辑器（内置 .NET 运行时）+ 谱面 Mod + BepInEx 框架 + 安装/卸载脚本，解压后运行 `安装.bat` 即可。rev2 同步了斜轨、自定义镜头、Media Foundation 解码与诊断日志；不含游戏素材、音频 bank 与音乐。
 
+已安装上一版的用户可改下 `NientumStudio_Exp-v1_2026.11.22_rev2_patch.zip`（0.2 MB），只含两个 DLL 和安装脚本，放进安装目录双击 `应用增量补丁.bat`。
+
 ## 版权与下架声明
 
 本项目为非官方玩家工具，与《Nientum - Op.ZERO》的开发商、发行商无隶属关系。游戏及其 CG、立绘、音乐、字体、剧本等素材版权归 QueseraGames 所有；发布包中的素材仅限个人学习交流，禁止商用、二次售卖或冒充官方。如权利人认为侵权，请通过本仓库 Issue 联系，核实后立即下架相关源码与发布物。
