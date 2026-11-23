@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -13,7 +14,7 @@ namespace NientumStudio.Dialogs
 
         private readonly ContentControl _pageHost = new ContentControl { Margin = new Thickness(24, 18, 24, 18) };
         private readonly ScrollViewer _scroll;
-        private readonly StackPanel[] _pages = new StackPanel[7];
+        private readonly StackPanel[] _pages = new StackPanel[8];
         private readonly ListBox _nav;
 
         private Button _bDark, _bLight, _bGame;
@@ -21,6 +22,13 @@ namespace NientumStudio.Dialogs
         private ComboBox _cmbGpu, _cmbScale, _cmbFps, _cmbQuality, _cmbLead;
         private Slider _sldMaster, _sldHit, _sldMetro;
         private CheckBox _chkHitsound, _chkMetronome, _chkFollow, _chkAutoMiddle, _chkWaveform, _chkPanelLibrary, _chkPanelMeta, _chkPanelHealth, _chkPanelInspector;
+        private TextBlock _txtUpdateCurrent, _txtUpdateStatus;
+        private TextBox _txtUpdateNotes;
+        private Button _btnCheckUpdate, _btnUpdateFull, _btnUpdatePatch, _btnUpdatePage;
+        private ProgressBar _prgUpdate;
+        private UpdateService.UpdateRelease _release;
+        private bool _updateBusy;
+        private bool _shuttingDown;
 
         public SettingsWindow()
         {
@@ -42,7 +50,7 @@ namespace NientumStudio.Dialogs
             root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
             _nav = new ListBox { Margin = new Thickness(14, 16, 8, 16), Background = Brushes.Transparent, BorderThickness = new Thickness(0) };
-            foreach (string item in new[] { "外观", "声音", "编辑", "试听与播放", "文件位置", "快捷键", "性能" })
+            foreach (string item in new[] { "外观", "声音", "编辑", "试听与播放", "文件位置", "快捷键", "性能", "更新" })
                 _nav.Items.Add(item);
             Grid.SetColumn(_nav, 0);
             root.Children.Add(_nav);
@@ -208,6 +216,225 @@ namespace NientumStudio.Dialogs
                 ("右键对象", "复制 / 删除 / 翻转 / 补中段"),
             })
                 AddShortcutRow(p5, key, desc);
+
+            // 7: 更新
+            var p7 = _pages[7];
+            AddHeader(p7, "更新");
+            AddNote(p7, "通过 GitHub 检查 Nientum 制谱器的新版本。更新只替换程序文件，保留 ui_settings.json、ui_theme.txt、studio_diag.log 与 CustomCharts；游戏目录里已装好的 Mod 不会自动改动，Mod 有变化时需重新运行安装包里的 安装.bat。");
+
+            _txtUpdateCurrent = new TextBlock
+            {
+                Text = $"当前版本：{UpdateService.CurrentVersionText}    更新仓库：{UpdateService.Owner}/{UpdateService.Repo}",
+                FontSize = 11,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 10)
+            };
+            _txtUpdateCurrent.SetResourceReference(TextBlock.ForegroundProperty, "TextPrimary");
+            p7.Children.Add(_txtUpdateCurrent);
+
+            var updateRow = new WrapPanel { Margin = new Thickness(0, 0, 0, 10) };
+            _btnCheckUpdate = new Button
+            {
+                Content = "检查更新",
+                Padding = new Thickness(14, 6, 14, 6),
+                Margin = new Thickness(0, 0, 8, 6),
+                Style = (Style)TryFindResource("GoldButton")
+            };
+            _btnCheckUpdate.Click += async (_, _) => await CheckForUpdatesAsync();
+            _btnUpdatePage = new Button { Content = "打开 Release 页面", Padding = new Thickness(14, 6, 14, 6), Margin = new Thickness(0, 0, 8, 6) };
+            _btnUpdatePage.Click += (_, _) => OpenReleasePage();
+            updateRow.Children.Add(_btnCheckUpdate);
+            updateRow.Children.Add(_btnUpdatePage);
+            p7.Children.Add(updateRow);
+
+            _txtUpdateStatus = new TextBlock
+            {
+                Text = "尚未检查更新。",
+                FontSize = 11,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            _txtUpdateStatus.SetResourceReference(TextBlock.ForegroundProperty, "TextSecondary");
+            p7.Children.Add(_txtUpdateStatus);
+
+            _prgUpdate = new ProgressBar
+            {
+                Minimum = 0,
+                Maximum = 100,
+                Height = 6,
+                Margin = new Thickness(0, 0, 0, 12),
+                Visibility = Visibility.Collapsed
+            };
+            p7.Children.Add(_prgUpdate);
+
+            var installRow = new WrapPanel { Margin = new Thickness(0, 0, 0, 10) };
+            _btnUpdateFull = new Button { Content = "下载并安装完整包", Padding = new Thickness(12, 5, 12, 5), Margin = new Thickness(0, 0, 8, 6), IsEnabled = false };
+            _btnUpdateFull.Click += async (_, _) => await InstallUpdateAsync(false);
+            _btnUpdatePatch = new Button { Content = "下载并安装增量包", Padding = new Thickness(12, 5, 12, 5), Margin = new Thickness(0, 0, 8, 6), IsEnabled = false };
+            _btnUpdatePatch.Click += async (_, _) => await InstallUpdateAsync(true);
+            installRow.Children.Add(_btnUpdateFull);
+            installRow.Children.Add(_btnUpdatePatch);
+            p7.Children.Add(installRow);
+
+            var notesLabel = new TextBlock { Text = "更新说明", FontSize = 11.5, Margin = new Thickness(0, 4, 0, 4) };
+            notesLabel.SetResourceReference(TextBlock.ForegroundProperty, "TextSecondary");
+            p7.Children.Add(notesLabel);
+            _txtUpdateNotes = new TextBox
+            {
+                Text = "（检查更新后显示）",
+                IsReadOnly = true,
+                AcceptsReturn = true,
+                TextWrapping = TextWrapping.Wrap,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                Height = 150,
+                FontSize = 11,
+                Padding = new Thickness(8, 6, 8, 6)
+            };
+            _txtUpdateNotes.SetResourceReference(TextBox.BackgroundProperty, "BgDeep");
+            _txtUpdateNotes.SetResourceReference(TextBox.ForegroundProperty, "TextPrimary");
+            _txtUpdateNotes.SetResourceReference(TextBox.BorderBrushProperty, "BorderBrush");
+            p7.Children.Add(_txtUpdateNotes);
+
+            AddNote(p7, "增量包只适用于上一版本：当前版本必须与「上一版 tag」一致才会显示增量按钮，否则请使用完整包。下载完成后编辑器会关闭，替换成功会自动重启；替换前的文件备份在安装根目录的 _update_backup_* 文件夹，失败会自动回滚。");
+        }
+
+        private async Task CheckForUpdatesAsync()
+        {
+            if (_updateBusy) return;
+            _updateBusy = true;
+            _btnCheckUpdate.IsEnabled = false;
+            _btnUpdateFull.IsEnabled = false;
+            _btnUpdatePatch.IsEnabled = false;
+            _prgUpdate.Visibility = Visibility.Visible;
+            _prgUpdate.IsIndeterminate = true;
+            _txtUpdateStatus.Text = "正在连接 GitHub 检查更新…";
+            _txtUpdateNotes.Text = "（检查更新后显示）";
+            try
+            {
+                var release = await UpdateService.CheckAsync();
+                _release = release;
+                _txtUpdateCurrent.Text = $"当前版本：{UpdateService.CurrentVersionText}    更新仓库：{UpdateService.Owner}/{UpdateService.Repo}";
+                string date = release.PublishedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "未知";
+                if (!release.IsNewer)
+                {
+                    _txtUpdateStatus.Text = $"已是最新版本（{release.Tag}，发布于 {date}）。";
+                    _btnUpdateFull.IsEnabled = false;
+                    _btnUpdatePatch.IsEnabled = false;
+                }
+                else
+                {
+                    string patchState;
+                    if (release.Patch == null) patchState = "本次发布没有增量包，请用完整包。";
+                    else if (!release.CanUsePatch) patchState = "当前版本与上一版不匹配，增量包不可用，请用完整包。";
+                    else patchState = "可用增量更新，体积远小于完整包。";
+                    _txtUpdateStatus.Text = $"发现新版本 {release.Tag}（发布于 {date}）。{patchState}";
+                    _btnUpdateFull.IsEnabled = release.Full != null;
+                    _btnUpdatePatch.IsEnabled = release.CanUsePatch;
+                }
+                _txtUpdateNotes.Text = string.IsNullOrWhiteSpace(release.Body) ? "（该 Release 没有填写说明）" : release.Body.Replace("\r\n", "\n");
+                AppLog.Info($"[Update] 检查完成 latest={release.Tag}, newer={release.IsNewer}, patch={release.CanUsePatch}");
+            }
+            catch (Exception ex)
+            {
+                _release = null;
+                _txtUpdateStatus.Text = "检查失败：" + ex.Message;
+                AppLog.Error("[Update] 检查更新失败", ex);
+            }
+            finally
+            {
+                _prgUpdate.IsIndeterminate = false;
+                _prgUpdate.Visibility = Visibility.Collapsed;
+                _btnCheckUpdate.IsEnabled = true;
+                _updateBusy = false;
+            }
+        }
+
+        private async Task InstallUpdateAsync(bool usePatch)
+        {
+            if (_updateBusy || _release == null) return;
+            var asset = usePatch ? _release.Patch : _release.Full;
+            if (asset == null)
+            {
+                MessageBox.Show(this, "该版本没有这种更新包，请改选另一种。", "更新");
+                return;
+            }
+            double sizeMb = asset.Size / 1048576.0;
+            string tip = usePatch
+                ? $"将下载增量包 {asset.Name}（{sizeMb:F1} MB）。\n\n下载完成后编辑器会关闭，替换成功会自动重启；用户设置、主题、日志与 CustomCharts 会保留。\n\n继续吗？"
+                : $"将下载完整包 {asset.Name}（{sizeMb:F0} MB）。\n\n完整包会覆盖安装目录里的编辑器、Mod 与安装脚本，但不会改动游戏目录。更新后如需同步游戏内 Mod，请重新运行安装包里的 安装.bat。\n\n继续吗？";
+            if (MessageBox.Show(this, tip, usePatch ? "增量更新" : "完整更新", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+                return;
+
+            _updateBusy = true;
+            _btnCheckUpdate.IsEnabled = false;
+            _btnUpdateFull.IsEnabled = false;
+            _btnUpdatePatch.IsEnabled = false;
+            _prgUpdate.IsIndeterminate = false;
+            _prgUpdate.Visibility = Visibility.Visible;
+            _prgUpdate.Value = 0;
+            _txtUpdateStatus.Text = "准备下载…";
+            try
+            {
+                var progress = new Progress<(long received, long total)>(p =>
+                {
+                    if (p.total > 0)
+                    {
+                        _prgUpdate.Value = Math.Min(100, p.received * 100.0 / p.total);
+                        _txtUpdateStatus.Text = $"下载中 {p.received / 1048576.0:F1} / {p.total / 1048576.0:F1} MB（{_prgUpdate.Value:F0}%）…";
+                    }
+                    else
+                    {
+                        _txtUpdateStatus.Text = $"下载中 {p.received / 1048576.0:F1} MB…";
+                    }
+                });
+                string archive = await UpdateService.DownloadAsync(_release, asset, usePatch, progress);
+                _txtUpdateStatus.Text = "下载完成，正在校验并解压…";
+                _prgUpdate.IsIndeterminate = true;
+                string source = await Task.Run(() => UpdateService.PrepareSource(archive, usePatch,
+                    new Progress<string>(m => _txtUpdateStatus.Text = m)));
+                _prgUpdate.IsIndeterminate = false;
+                _prgUpdate.Value = 100;
+
+                if (MessageBox.Show(this,
+                        $"更新已准备好。\n\n关闭编辑器后将替换程序文件并自动重启；替换前的文件会备份在安装根目录的 _update_backup_* 下。\n\n现在继续吗？",
+                        "应用更新", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+                {
+                    _txtUpdateStatus.Text = "更新包已下载。再次点击对应按钮即可继续（替换需要关闭编辑器）。";
+                    return;
+                }
+
+                UpdateService.BeginApply(source, usePatch);
+                _shuttingDown = true;
+                Application.Current.Shutdown();
+            }
+            catch (Exception ex)
+            {
+                _txtUpdateStatus.Text = "更新失败：" + ex.Message;
+                AppLog.Error("[Update] 下载或准备更新失败", ex);
+                MessageBox.Show(this, "更新失败：" + ex.Message, "更新失败", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            finally
+            {
+                if (!_shuttingDown)
+                {
+                    _prgUpdate.IsIndeterminate = false;
+                    _prgUpdate.Visibility = Visibility.Collapsed;
+                    _btnCheckUpdate.IsEnabled = true;
+                    _btnUpdateFull.IsEnabled = _release?.IsNewer == true && _release?.Full != null;
+                    _btnUpdatePatch.IsEnabled = _release?.CanUsePatch == true;
+                    _updateBusy = false;
+                }
+            }
+        }
+
+        private void OpenReleasePage()
+        {
+            try
+            {
+                string url = _release?.PageUrl ?? UpdateService.RepoUrl + "/releases";
+                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            }
+            catch { }
         }
 
         private Button MakeThemeButton(string label, NientumStudio.Services.ThemeMode mode)
@@ -429,8 +656,23 @@ namespace NientumStudio.Dialogs
             }
         }
 
+        protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+        {
+            if (_updateBusy && !_shuttingDown)
+            {
+                e.Cancel = true;
+                MessageBox.Show(this, "更新正在进行，请等下载和替换完成后再关闭设置窗口。", "更新中");
+            }
+            base.OnClosing(e);
+        }
+
         private void SaveAndClose()
         {
+            if (_updateBusy)
+            {
+                MessageBox.Show(this, "更新正在进行，请等下载和替换完成后再保存并关闭。", "更新中");
+                return;
+            }
             var s = EditorSettings.Current;
             bool gpuBefore = s.GpuAcceleration;
             if (_cmbSnap?.SelectedItem is ComboBoxItem si && si.Tag is double sv) s.SnapDiv = (int)sv;

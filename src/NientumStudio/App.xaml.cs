@@ -10,6 +10,7 @@ namespace NientumStudio
         protected override void OnStartup(StartupEventArgs e)
         {
             AppLog.InitSession();
+            Services.UpdateService.CleanupCache();
             DispatcherUnhandledException += (_, ex) =>
             {
                 AppLog.Error("DispatcherUnhandledException", ex.Exception);
