@@ -122,6 +122,102 @@
     </Setter>
   </Style>
 
+  <Style x:Key="CollapsePillBtn" TargetType="Button">
+    <Setter Property="Background" Value="{DynamicResource PillBg}" />
+    <Setter Property="Foreground" Value="{DynamicResource AccentGold}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentGold}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="Padding" Value="8,2" />
+    <Setter Property="FontSize" Value="10.5" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Button">
+          <Border x:Name="bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="5" Padding="{TemplateBinding Padding}">
+            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="bd" Property="Background" Value="{DynamicResource ButtonHover}" />
+              <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+              <Setter TargetName="bd" Property="Background" Value="{DynamicResource ButtonPressed}" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style x:Key="SectionExpander" TargetType="Expander">
+    <Setter Property="Background" Value="{DynamicResource BgCard}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="Margin" Value="0,0,0,8" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Expander">
+          <Border x:Name="OuterBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8" SnapsToDevicePixels="True">
+            <StackPanel>
+              <ToggleButton x:Name="HeaderToggle" IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
+                            Focusable="False" Cursor="Hand" OverridesDefaultStyle="True">
+                <ToggleButton.Template>
+                  <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="HdrBd" Background="{DynamicResource CardHeaderBg}" CornerRadius="7" Padding="10,7">
+                      <DockPanel>
+                        <Border x:Name="StatePill" DockPanel.Dock="Right" Background="{DynamicResource PillBg}"
+                                BorderBrush="{DynamicResource AccentGold}" BorderThickness="1" CornerRadius="4"
+                                Padding="6,1.5" Margin="6,0,0,0" VerticalAlignment="Center">
+                          <TextBlock x:Name="StateText" Text="▾ 收起" FontSize="10" FontWeight="SemiBold"
+                                     Foreground="{DynamicResource AccentGold}" VerticalAlignment="Center" />
+                        </Border>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                          <Border x:Name="AccentBar" Width="4" Height="14" CornerRadius="2" Margin="0,0,8,0"
+                                  Background="{Binding Tag, RelativeSource={RelativeSource AncestorType=Expander}, TargetNullValue={StaticResource AccentGold}}" />
+                          <ContentPresenter ContentSource="Header" Content="{Binding Header, RelativeSource={RelativeSource AncestorType=Expander}}"
+                                            TextElement.FontSize="11.5" TextElement.FontWeight="SemiBold"
+                                            TextElement.Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" />
+                        </StackPanel>
+                      </DockPanel>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                      <Trigger Property="IsChecked" Value="False">
+                        <Setter TargetName="StateText" Property="Text" Value="▸ 展开" />
+                        <Setter TargetName="StatePill" Property="Background" Value="{DynamicResource ButtonHover}" />
+                      </Trigger>
+                      <Trigger Property="IsMouseOver" Value="True">
+                        <Setter TargetName="HdrBd" Property="Background" Value="{DynamicResource ButtonHover}" />
+                      </Trigger>
+                    </ControlTemplate.Triggers>
+                  </ControlTemplate>
+                </ToggleButton.Template>
+              </ToggleButton>
+              <Border x:Name="ContentHost" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0"
+                      Padding="10,9,10,10" Visibility="Collapsed">
+                <ContentPresenter />
+              </Border>
+            </StackPanel>
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsExpanded" Value="True">
+              <Setter TargetName="ContentHost" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <Trigger SourceName="HeaderToggle" Property="IsMouseOver" Value="True">
+              <Setter TargetName="OuterBorder" Property="BorderBrush" Value="{DynamicResource AccentGold}" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
   <!-- ============ Button ============ -->
   <Style TargetType="Button">
     <Setter Property="Background" Value="{DynamicResource ButtonBg}" />

@@ -683,6 +683,8 @@ namespace NientumStudio.Controls
                 var penBar = PenOf(ThemeManager.PreviewGridBar, 1.2);
                 var penBeat = PenOf(ThemeManager.PreviewGridBeat, 1.0);
                 var penSub = PenOf(ThemeManager.PreviewGridSub, 1.0);
+                bool useAccent = EditorSettings.Current.BeatGridAccent;
+                bool isLightTheme = ThemeManager.IsLight;
 
                 for (int i = 0; i < snap.Bpms.Count; i++)
                 {
@@ -706,7 +708,18 @@ namespace NientumStudio.Controls
                         int beatNum = (int)Math.Round((double)s2 / gridDiv);
                         bool isBar = isBeat && beatNum % beatsPerBar == 0;
                         if (!isBeat && !isBar && s2 % lineStep != 0) continue;
-                        dc.DrawLine(isBar ? penBar : (isBeat ? penBeat : penSub), new Point(x, 16), new Point(x, h - 6));
+                        Pen linePen;
+                        if (useAccent)
+                        {
+                            var kind = BeatGridStyle.ClassifyGridLine(s2, gridDiv, beatsPerBar);
+                            var (col, thick) = BeatGridStyle.GetAccentPenSpec(kind, isLightTheme, true);
+                            linePen = PenOf(col, thick);
+                        }
+                        else
+                        {
+                            linePen = isBar ? penBar : (isBeat ? penBeat : penSub);
+                        }
+                        dc.DrawLine(linePen, new Point(x, 16), new Point(x, h - 6));
                         if (isBar && !IsProjectionBox)
                         {
                             int barNo = (beatNum / beatsPerBar) + 1;

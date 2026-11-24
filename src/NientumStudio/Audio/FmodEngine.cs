@@ -431,13 +431,13 @@ namespace NientumStudio.Audio
 
         public void SetPitch(float pitch)
         {
-            _pitch = Math.Clamp(pitch, 0.25f, 2.0f);
+            _pitch = Math.Clamp(pitch, 0.1f, 2.0f);
             if (_songChannel != IntPtr.Zero) FMOD5_Channel_SetPitch(_songChannel, _pitch);
         }
 
         public void SetVolume(float volume)
         {
-            _volume = Math.Clamp(volume, 0f, 1f);
+            _volume = Math.Clamp(volume, 0f, 3.5f);
             if (_songChannel != IntPtr.Zero) FMOD5_Channel_SetVolume(_songChannel, _volume);
         }
 

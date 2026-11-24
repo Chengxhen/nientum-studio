@@ -33,6 +33,14 @@ namespace NientumStudio.Models
         public float previewDurationSec { get; set; } = 15f;
         public string audioFile { get; set; } = "";
         public string coverFile { get; set; } = "";
+        public int defaultBeat { get; set; } = 4;
+        public string bgFile { get; set; } = "";
+        public float bgDim { get; set; } = 0.35f;
+        public float bgVideoOffsetSec { get; set; } = 0f;
+        public float bgScale { get; set; } = 1.0f;
+        public float bgPosX { get; set; } = 0f;
+        public float bgPosY { get; set; } = 0f;
+        public float bgmGain { get; set; } = 1.0f;
         public bool isOriginal { get; set; } = false;
         // 官方曲目副本标记：只写入本地工作区，绝不进入游戏目录
         public bool isOfficialCopy { get; set; } = false;

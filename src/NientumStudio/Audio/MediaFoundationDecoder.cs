@@ -121,6 +121,7 @@ namespace NientumStudio.Audio
 
                 byte[] wav = ms.ToArray();
                 WriteWavHeader(wav, (int)dataLen, 48000, 2, 16);
+                NormalizeWavLoudnessIfQuiet(wav);
                 durationSec = dataLen / 192000.0; // 48000 * 2ch * 2bytes
                 return wav;
             }
@@ -167,6 +168,49 @@ namespace NientumStudio.Audio
                 peaks[b] = Math.Min(1f, max);
             }
             return peaks;
+        }
+
+        private static void NormalizeWavLoudnessIfQuiet(byte[] wavBytes)
+        {
+            if (wavBytes == null || wavBytes.Length <= 48) return;
+            try
+            {
+                const int dataStart = 44;
+                int totalSamples = (wavBytes.Length - dataStart) / 2;
+                if (totalSamples < 1000) return;
+
+                double sumSq = 0.0;
+                int count = 0;
+                const int stride = 8;
+                for (int i = 0; i < totalSamples; i += stride)
+                {
+                    int idx = dataStart + i * 2;
+                    short s = (short)(wavBytes[idx] | (wavBytes[idx + 1] << 8));
+                    double norm = s / 32768.0;
+                    sumSq += norm * norm;
+                    count++;
+                }
+                if (count == 0) return;
+                float rms = (float)Math.Sqrt(sumSq / count);
+                if (rms <= 0.002f || rms >= 0.20f) return;
+
+                float gain = Math.Clamp(0.24f / rms, 1f, 3.5f);
+                if (gain <= 1.05f) return;
+
+                for (int i = 0; i < totalSamples; i++)
+                {
+                    int idx = dataStart + i * 2;
+                    short s = (short)(wavBytes[idx] | (wavBytes[idx + 1] << 8));
+                    float v = (s / 32768f) * gain;
+                    if (v > 0.85f) v = 0.85f + 0.12f * MathF.Tanh((v - 0.85f) / 0.12f);
+                    else if (v < -0.85f) v = -0.85f - 0.12f * MathF.Tanh((-v - 0.85f) / 0.12f);
+
+                    int outSample = Math.Clamp((int)Math.Round(v * 32767f), short.MinValue, short.MaxValue);
+                    wavBytes[idx] = (byte)(outSample & 0xFF);
+                    wavBytes[idx + 1] = (byte)((outSample >> 8) & 0xFF);
+                }
+            }
+            catch { }
         }
 
         private static void WriteWavHeader(byte[] wav, int dataLen, int sampleRate, short channels, short bitsPerSample)

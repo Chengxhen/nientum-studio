@@ -20,6 +20,7 @@ namespace NientumStudio.Controls
         public Func<double> GetPlayTime { get; set; }
         public Func<double> GetDuration { get; set; }
         public Func<double> GetDefaultBpm { get; set; }
+        public Func<int> GetDefaultBeat { get; set; }
         public Func<float[]> GetWaveform { get; set; }
         public Func<EditorTool> GetTool { get; set; }
         public Func<int> GetSnapDiv { get; set; }
@@ -395,7 +396,7 @@ namespace NientumStudio.Controls
                     list.Add((b.raw + Off, b.bpm, b.beat));
             }
             list.Sort((a, b) => a.time.CompareTo(b.time));
-            if (list.Count == 0) list.Add((0.0, GetDefaultBpm?.Invoke() ?? 120.0, 4));
+            if (list.Count == 0) list.Add((0.0, GetDefaultBpm?.Invoke() ?? 120.0, Math.Clamp(GetDefaultBeat?.Invoke() ?? 4, 1, 16)));
             return list;
         }
 
@@ -1257,6 +1258,8 @@ namespace NientumStudio.Controls
             var penBar = PenOf(ThemeManager.TimelineGridBar, 1.4);
             var penBeat = PenOf(ThemeManager.TimelineGridBeat, 1.0);
             var penSub = PenOf(ThemeManager.TimelineGridSub, 1.0);
+            bool useAccent = EditorSettings.Current.BeatGridAccent;
+            bool isLightTheme = ThemeManager.IsLight;
 
             for (int i = 0; i < bpms.Count; i++)
             {
@@ -1279,7 +1282,18 @@ namespace NientumStudio.Controls
                     int beatNum = (int)Math.Round((double)s / div);
                     bool isBar = isBeat && beatNum % beatsPerBar == 0;
                     if (!isBeat && !isBar && s % lineStep != 0) continue;
-                    dc.DrawLine(isBar ? penBar : (isBeat ? penBeat : penSub), new Point(x, L.rulerH), new Point(x, h));
+                    Pen linePen;
+                    if (useAccent)
+                    {
+                        var kind = BeatGridStyle.ClassifyGridLine(s, div, beatsPerBar);
+                        var (col, thick) = BeatGridStyle.GetAccentPenSpec(kind, isLightTheme, false);
+                        linePen = PenOf(col, thick);
+                    }
+                    else
+                    {
+                        linePen = isBar ? penBar : (isBeat ? penBeat : penSub);
+                    }
+                    dc.DrawLine(linePen, new Point(x, L.rulerH), new Point(x, h));
                     if (isBar)
                     {
                         string barText = PxPerSec >= 150 ? $"M{(beatNum / beatsPerBar) + 1} · {t:F1}s" : $"M{(beatNum / beatsPerBar) + 1}";

@@ -14,6 +14,7 @@ namespace NientumStudio.Services
         public bool FollowPlayhead { get; set; } = true;
         public bool AutoMiddle { get; set; } = true;
         public bool ShowWaveform { get; set; } = true;
+        public bool BeatGridAccent { get; set; } = true;
         public double MasterVolume { get; set; } = 1.0;
         public double HitsoundVolume { get; set; } = 0.6;
         public int HitLeadMs { get; set; } = 20;

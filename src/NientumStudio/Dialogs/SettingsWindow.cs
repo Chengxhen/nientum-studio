@@ -21,7 +21,7 @@ namespace NientumStudio.Dialogs
         private ComboBox _cmbSnap, _cmbGrid, _cmbRate;
         private ComboBox _cmbGpu, _cmbScale, _cmbFps, _cmbQuality, _cmbLead;
         private Slider _sldMaster, _sldHit, _sldMetro;
-        private CheckBox _chkHitsound, _chkMetronome, _chkFollow, _chkAutoMiddle, _chkWaveform, _chkPanelLibrary, _chkPanelMeta, _chkPanelHealth, _chkPanelInspector;
+        private CheckBox _chkHitsound, _chkMetronome, _chkFollow, _chkAutoMiddle, _chkWaveform, _chkBeatGridAccent, _chkPanelLibrary, _chkPanelMeta, _chkPanelHealth, _chkPanelInspector;
         private TextBlock _txtUpdateCurrent, _txtUpdateStatus;
         private TextBox _txtUpdateNotes;
         private Button _btnCheckUpdate, _btnUpdateFull, _btnUpdatePatch, _btnUpdatePage;
@@ -148,11 +148,13 @@ namespace NientumStudio.Dialogs
             _cmbGrid = AddCombo(p2, "预览分格密度", new (string label, double value)[] { ("关闭", 0), ("1/1 拍格", 1), ("1/2 拍格", 2), ("1/3 拍格", 3), ("1/4 拍格", 4), ("1/6 拍格", 6), ("1/8 拍格", 8), ("1/16 拍格", 16), ("1/24 拍格", 24), ("1/32 拍格", 32) }, s.PreviewGridDiv);
             _chkAutoMiddle = AddCheck(p2, "新建长条时自动补全中段", s.AutoMiddle);
             AddNote(p2, "中段节点是长条的途中判定点，可随时在检查器里补全或清除。");
+            _chkBeatGridAccent = AddCheck(p2, "启用分格线拍子重音加粗与分色", s.BeatGridAccent);
+            p2.Children.Add(BuildBeatGridLegendCard());
 
             // 3: 试听与播放
             var p3 = _pages[3];
             AddHeader(p3, "试听与播放");
-            _cmbRate = AddCombo(p3, "默认播放倍速", new (string label, double value)[] { ("0.5x", 0.5), ("0.75x", 0.75), ("1.0x", 1.0), ("1.25x", 1.25) }, s.DefaultRate);
+            _cmbRate = AddCombo(p3, "默认播放倍速", new (string label, double value)[] { ("0.1x", 0.1), ("0.2x", 0.2), ("0.25x", 0.25), ("0.3x", 0.3), ("0.4x", 0.4), ("0.5x", 0.5), ("0.75x", 0.75), ("1.0x", 1.0), ("1.25x", 1.25) }, s.DefaultRate);
             _chkHitsound = AddCheck(p3, "播放时播放打击音", s.Hitsound);
             _chkMetronome = AddCheck(p3, "播放节拍器", s.Metronome);
             _chkFollow = AddCheck(p3, "时间轴跟随播放指针", s.FollowPlayhead);
@@ -508,6 +510,78 @@ namespace NientumStudio.Dialogs
             return cb;
         }
 
+        private static UIElement BuildBeatGridLegendCard()
+        {
+            var card = new Border
+            {
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(7),
+                Padding = new Thickness(12, 9, 12, 9),
+                Margin = new Thickness(0, 2, 0, 12)
+            };
+            card.SetResourceReference(Border.BackgroundProperty, "BgDeep");
+            card.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
+
+            var sp = new StackPanel();
+            var title = new TextBlock
+            {
+                Text = "分格线颜色与粗细图例（自动跟随曲目默认拍号或分段 BPM 事件的拍号 1–16）：",
+                FontSize = 11,
+                Margin = new Thickness(0, 0, 0, 6),
+                TextWrapping = TextWrapping.Wrap
+            };
+            title.SetResourceReference(TextBlock.ForegroundProperty, "TextSecondary");
+            sp.Children.Add(title);
+
+            bool isLight = ThemeManager.IsLight;
+            foreach (var (kind, name, desc) in BeatGridStyle.LegendEntries)
+            {
+                var (col, thick) = BeatGridStyle.GetAccentPenSpec(kind, isLight, false);
+                var row = new Grid { Margin = new Thickness(0, 3, 0, 3) };
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(42) });
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(175) });
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+                var lineSample = new Border
+                {
+                    Width = 28,
+                    Height = Math.Max(1.0, thick),
+                    Background = new SolidColorBrush(col),
+                    CornerRadius = new CornerRadius(0.5),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    HorizontalAlignment = HorizontalAlignment.Left
+                };
+                Grid.SetColumn(lineSample, 0);
+                row.Children.Add(lineSample);
+
+                var lblName = new TextBlock
+                {
+                    Text = $"{name} ({thick:F1}px)",
+                    FontSize = 11,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                lblName.SetResourceReference(TextBlock.ForegroundProperty, "TextPrimary");
+                Grid.SetColumn(lblName, 1);
+                row.Children.Add(lblName);
+
+                var lblDesc = new TextBlock
+                {
+                    Text = desc,
+                    FontSize = 10.5,
+                    TextWrapping = TextWrapping.Wrap,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                lblDesc.SetResourceReference(TextBlock.ForegroundProperty, "TextDim");
+                Grid.SetColumn(lblDesc, 2);
+                row.Children.Add(lblDesc);
+
+                sp.Children.Add(row);
+            }
+
+            card.Child = sp;
+            return card;
+        }
+
         private static Slider AddSlider(Panel host, string label, double value)
         {
             var sp = new StackPanel { Margin = new Thickness(0, 10, 0, 8) };
@@ -691,6 +765,7 @@ namespace NientumStudio.Dialogs
             s.PanelRightVisible = s.PanelHealth || s.PanelInspector;
             if (_chkFollow != null) s.FollowPlayhead = _chkFollow.IsChecked == true;
             if (_chkAutoMiddle != null) s.AutoMiddle = _chkAutoMiddle.IsChecked == true;
+            if (_chkBeatGridAccent != null) s.BeatGridAccent = _chkBeatGridAccent.IsChecked == true;
             if (_chkWaveform != null) s.ShowWaveform = _chkWaveform.IsChecked == true;
             if (_cmbGpu?.SelectedItem is ComboBoxItem gi2 && gi2.Tag is double gv2) s.GpuAcceleration = gv2 > 0.5;
             if (_cmbScale?.SelectedItem is ComboBoxItem si2 && si2.Tag is double sv2) s.PreviewScale = sv2;

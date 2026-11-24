@@ -72,7 +72,12 @@
             <!-- 倍速 -->
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
               <TextBlock Text="倍速" VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}" FontSize="11" Margin="0,0,5,0" />
-              <ComboBox x:Name="CmbRate" Width="64" Height="28" Focusable="False" SelectedIndex="2" SelectionChanged="CmbRate_SelectionChanged">
+              <ComboBox x:Name="CmbRate" Width="68" Height="28" Focusable="False" SelectedIndex="7" SelectionChanged="CmbRate_SelectionChanged">
+                <ComboBoxItem Content="0.1x" Tag="0.1" />
+                <ComboBoxItem Content="0.2x" Tag="0.2" />
+                <ComboBoxItem Content="0.25x" Tag="0.25" />
+                <ComboBoxItem Content="0.3x" Tag="0.3" />
+                <ComboBoxItem Content="0.4x" Tag="0.4" />
                 <ComboBoxItem Content="0.5x" Tag="0.5" />
                 <ComboBoxItem Content="0.75x" Tag="0.75" />
                 <ComboBoxItem Content="1.0x" Tag="1.0" />
@@ -166,14 +171,13 @@
                 <Grid>
                   <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
                   </Grid.RowDefinitions>
 
                   <Border Grid.Row="0" Background="{DynamicResource CardHeaderBg}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="14,9">
                     <DockPanel>
                       <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button x:Name="BtnFoldLibrary" Content="▾ 收起" Focusable="False" Style="{StaticResource CollapsePillBtn}" Click="BtnToggleFold_Click" Tag="library" Margin="0,0,6,0" ToolTip="折叠 / 展开曲目库列表" />
                         <Button Content="拆出" Focusable="False" Style="{StaticResource SmallPanelBtn}" Click="BtnPopPanel_Click" Tag="library" Margin="0,0,5,0" ToolTip="把曲目库拆成独立窗口" />
                         <Button Content="关闭" Focusable="False" Style="{StaticResource SmallPanelBtn}" Click="BtnClosePanel_Click" Tag="library" ToolTip="关闭曲目库（可在顶栏「面板」中重新打开）" />
                       </StackPanel>
@@ -184,7 +188,8 @@
                     </DockPanel>
                   </Border>
 
-                  <Grid Grid.Row="1" Margin="12,10,12,8">
+                  <StackPanel x:Name="LibraryBody" Grid.Row="1">
+                  <Grid Margin="12,10,12,8">
                     <TextBox x:Name="TxtSongSearch" FontSize="11.5" Padding="8,5" TextChanged="TxtSongSearch_TextChanged" ToolTip="按曲名 / 曲师 / 文件夹名搜索曲目" />
                     <TextBlock Text="筛选曲名 / 曲师 / 目录..." FontSize="11" Foreground="{DynamicResource TextDim}" IsHitTestVisible="False" VerticalAlignment="Center" Margin="11,0,0,0">
                       <TextBlock.Style>
@@ -200,7 +205,7 @@
                     </TextBlock>
                   </Grid>
 
-                  <Grid Grid.Row="2" Margin="12,0,12,8">
+                  <Grid Margin="12,0,12,8">
                     <Grid.ColumnDefinitions>
                       <ColumnDefinition Width="*" />
                       <ColumnDefinition Width="*" />
@@ -211,7 +216,7 @@
                     <Button Grid.Column="2" Content="官方曲目" Focusable="False" Padding="6,4" FontSize="11" Click="BtnOfficialLibrary_Click" ToolTip="从解包数据导入官方 FreePlay 谱面到本地工作区（可编辑，不写游戏）" />
                   </Grid>
 
-                  <ListBox x:Name="LstSongs" Grid.Row="3" MaxHeight="214" SelectionChanged="LstSongs_SelectionChanged" Margin="6,0,6,6" Background="Transparent" BorderThickness="0">
+                  <ListBox x:Name="LstSongs" MaxHeight="214" SelectionChanged="LstSongs_SelectionChanged" Margin="6,0,6,6" Background="Transparent" BorderThickness="0">
                     <ListBox.ItemContainerStyle>
                       <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
                         <Setter Property="Padding" Value="6,6" />
@@ -261,6 +266,7 @@
                       </DataTemplate>
                     </ListBox.ItemTemplate>
                   </ListBox>
+                  </StackPanel>
                 </Grid>
               </Border>
               <Border x:Name="LibraryPopoutHint" Background="{DynamicResource BgCard}" Visibility="Collapsed">
@@ -298,77 +304,93 @@
                   <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="13,10,13,14">
                       <StackPanel x:Name="MetaPanel">
-                        <!-- 分段难度选择栏 -->
-                        <Border Style="{StaticResource CommandGroupBorder}" Margin="0,0,0,10" Padding="3">
-                          <Grid>
-                            <Grid.ColumnDefinitions>
-                              <ColumnDefinition Width="*" />
-                              <ColumnDefinition Width="*" />
-                              <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <Button x:Name="BtnDiffNormal" Focusable="False" Content="Normal" Grid.Column="0" Margin="0,0,3,0" Padding="6,4" Click="BtnDiff_Click" Tag="normal" FontSize="11.5" />
-                            <Button x:Name="BtnDiffHard" Focusable="False" Content="Hard" Grid.Column="1" Margin="0,0,3,0" Padding="6,4" Click="BtnDiff_Click" Tag="hard" FontSize="11.5" />
-                            <Button x:Name="BtnDiffExtreme" Focusable="False" Content="Extreme" Grid.Column="2" Padding="6,4" Click="BtnDiff_Click" Tag="extreme" FontSize="11.5" />
-                          </Grid>
-                        </Border>
-
-                        <Grid Margin="0,0,0,8">
-                          <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="*" />
-                          </Grid.ColumnDefinitions>
-                          <StackPanel Grid.Column="0" Margin="0,0,6,0">
-                            <TextBlock Text="难度等级（0 = 禁用）" Style="{StaticResource FieldLabel}" Margin="0,0,0,3" />
-                            <TextBox x:Name="TxtDiffLevel" Text="5" TextChanged="MetaField_TextChanged" Padding="7,4" />
-                          </StackPanel>
-                          <StackPanel Grid.Column="1" Margin="6,0,0,0">
-                            <TextBlock Text="基准 BPM" Style="{StaticResource FieldLabel}" Margin="0,0,0,3" />
+                        <!-- 1. 难度与节拍 -->
+                        <Expander x:Name="ExpDiffBpm" Style="{StaticResource SectionExpander}" Header="难度与节拍" Tag="{DynamicResource AccentGold}" IsExpanded="True">
+                          <StackPanel>
+                            <Border Style="{StaticResource CommandGroupBorder}" Margin="0,0,0,8" Padding="3">
+                              <Grid>
+                                <Grid.ColumnDefinitions>
+                                  <ColumnDefinition Width="*" />
+                                  <ColumnDefinition Width="*" />
+                                  <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Button x:Name="BtnDiffNormal" Focusable="False" Content="Normal" Grid.Column="0" Margin="0,0,3,0" Padding="6,4" Click="BtnDiff_Click" Tag="normal" FontSize="11.5" />
+                                <Button x:Name="BtnDiffHard" Focusable="False" Content="Hard" Grid.Column="1" Margin="0,0,3,0" Padding="6,4" Click="BtnDiff_Click" Tag="hard" FontSize="11.5" />
+                                <Button x:Name="BtnDiffExtreme" Focusable="False" Content="Extreme" Grid.Column="2" Padding="6,4" Click="BtnDiff_Click" Tag="extreme" FontSize="11.5" />
+                              </Grid>
+                            </Border>
+                            <Grid Margin="0,0,0,8">
+                              <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                              </Grid.ColumnDefinitions>
+                              <StackPanel Grid.Column="0" Margin="0,0,6,0">
+                                <TextBlock Text="难度等级（0 = 禁用）" Style="{StaticResource FieldLabel}" Margin="0,0,0,3" />
+                                <TextBox x:Name="TxtDiffLevel" Text="5" TextChanged="MetaField_TextChanged" Padding="7,4" />
+                              </StackPanel>
+                              <StackPanel Grid.Column="1" Margin="6,0,0,0">
+                                <TextBlock Text="基准 BPM" Style="{StaticResource FieldLabel}" Margin="0,0,0,3" />
+                                <Grid>
+                                  <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                  </Grid.ColumnDefinitions>
+                                  <TextBox x:Name="TxtBpm" Grid.Column="0" Text="120" TextChanged="TxtBpm_TextChanged" Padding="7,4" />
+                                  <Button Grid.Column="1" Focusable="False" Content="测速" FontSize="10.5" Padding="8,3" Margin="5,0,0,0" Click="BtnTapBpm_Click" ToolTip="跟着节拍连续点击测算 BPM" />
+                                </Grid>
+                              </StackPanel>
+                            </Grid>
                             <Grid>
                               <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
                               </Grid.ColumnDefinitions>
-                              <TextBox x:Name="TxtBpm" Grid.Column="0" Text="120" TextChanged="TxtBpm_TextChanged" Padding="7,4" />
-                              <Button Grid.Column="1" Focusable="False" Content="测速" FontSize="10.5" Padding="8,3" Margin="5,0,0,0" Click="BtnTapBpm_Click" ToolTip="跟着节拍连续点击测算 BPM" />
+                              <StackPanel Grid.Column="0" Margin="0,0,6,0">
+                                <TextBlock Text="偏移（毫秒）" Style="{StaticResource FieldLabel}" Margin="0,0,0,3" />
+                                <TextBox x:Name="TxtOffsetMs" Text="0" TextChanged="MetaField_TextChanged" Padding="7,4" />
+                              </StackPanel>
+                              <StackPanel Grid.Column="1" Margin="6,0,0,0">
+                                <TextBlock Text="默认拍号 (1–16)" Style="{StaticResource FieldLabel}" Margin="0,0,0,3" />
+                                <ComboBox x:Name="CmbDefaultBeat" IsEditable="True" Text="4" Padding="6,3" SelectionChanged="CmbDefaultBeat_Changed" LostFocus="CmbDefaultBeat_Changed">
+                                  <ComboBoxItem Content="4" />
+                                  <ComboBoxItem Content="3" />
+                                  <ComboBoxItem Content="2" />
+                                  <ComboBoxItem Content="6" />
+                                  <ComboBoxItem Content="8" />
+                                  <ComboBoxItem Content="9" />
+                                  <ComboBoxItem Content="12" />
+                                </ComboBox>
+                              </StackPanel>
                             </Grid>
                           </StackPanel>
-                        </Grid>
+                        </Expander>
 
-                        <TextBlock Text="曲名" Style="{StaticResource FieldLabel}" Margin="0,0,0,3" />
-                        <TextBox x:Name="TxtTitle" Margin="0,0,0,8" TextChanged="MetaField_TextChanged" Padding="7,4" />
-
-                        <Grid Margin="0,0,0,8">
-                          <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="*" />
-                          </Grid.ColumnDefinitions>
-                          <StackPanel Grid.Column="0" Margin="0,0,6,0">
-                            <TextBlock Text="曲师" Style="{StaticResource FieldLabel}" Margin="0,0,0,3" />
-                            <TextBox x:Name="TxtArtist" TextChanged="MetaField_TextChanged" Padding="7,4" />
-                          </StackPanel>
-                          <StackPanel Grid.Column="1" Margin="6,0,0,0">
-                            <TextBlock Text="谱师" Style="{StaticResource FieldLabel}" Margin="0,0,0,3" />
-                            <TextBox x:Name="TxtCharter" TextChanged="MetaField_TextChanged" Padding="7,4" />
-                          </StackPanel>
-                        </Grid>
-
-                        <Grid Margin="0,0,0,10">
-                          <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="*" />
-                          </Grid.ColumnDefinitions>
-                          <StackPanel Grid.Column="0" Margin="0,0,6,0">
-                            <TextBlock Text="偏移（毫秒）" Style="{StaticResource FieldLabel}" Margin="0,0,0,3" />
-                            <TextBox x:Name="TxtOffsetMs" Text="0" TextChanged="MetaField_TextChanged" Padding="7,4" />
-                          </StackPanel>
-                          <StackPanel Grid.Column="1" Margin="6,0,0,0">
+                        <!-- 2. 曲目信息（可折叠） -->
+                        <Expander x:Name="ExpSongInfo" Style="{StaticResource SectionExpander}" Header="曲目信息（曲名 / 曲师 / 试听）" Tag="{DynamicResource AccentBlue}" IsExpanded="False">
+                          <StackPanel>
+                            <TextBlock Text="曲名" Style="{StaticResource FieldLabel}" Margin="0,0,0,3" />
+                            <TextBox x:Name="TxtTitle" Margin="0,0,0,8" TextChanged="MetaField_TextChanged" Padding="7,4" />
+                            <Grid Margin="0,0,0,8">
+                              <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                              </Grid.ColumnDefinitions>
+                              <StackPanel Grid.Column="0" Margin="0,0,6,0">
+                                <TextBlock Text="曲师" Style="{StaticResource FieldLabel}" Margin="0,0,0,3" />
+                                <TextBox x:Name="TxtArtist" TextChanged="MetaField_TextChanged" Padding="7,4" />
+                              </StackPanel>
+                              <StackPanel Grid.Column="1" Margin="6,0,0,0">
+                                <TextBlock Text="谱师" Style="{StaticResource FieldLabel}" Margin="0,0,0,3" />
+                                <TextBox x:Name="TxtCharter" TextChanged="MetaField_TextChanged" Padding="7,4" />
+                              </StackPanel>
+                            </Grid>
                             <TextBlock Text="试听起点（秒）" Style="{StaticResource FieldLabel}" Margin="0,0,0,3" />
                             <TextBox x:Name="TxtPreviewSec" Text="0" TextChanged="MetaField_TextChanged" Padding="7,4" />
                           </StackPanel>
-                        </Grid>
+                        </Expander>
 
-                        <!-- 音频与封面媒体卡 -->
-                        <Border Background="{DynamicResource BgCard}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="9" Padding="10" Margin="0,0,0,10">
+                        <!-- 3. 音频、音量与封面 -->
+                        <Expander x:Name="ExpAudioCover" Style="{StaticResource SectionExpander}" Header="音频、音量与封面" Tag="{DynamicResource AccentGround}" IsExpanded="True">
                           <StackPanel>
                             <Grid Margin="0,0,0,8">
                               <Grid.ColumnDefinitions>
@@ -377,6 +399,16 @@
                               </Grid.ColumnDefinitions>
                               <TextBlock x:Name="TxtAudioStatus" Grid.Column="0" Text="未导入音频" FontSize="11" Foreground="{DynamicResource TextDim}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,8,0" />
                               <Button Grid.Column="1" Focusable="False" Content="导入音频" FontSize="10.5" Padding="9,3.5" Click="BtnImportAudio_Click" />
+                            </Grid>
+                            <Grid Margin="0,0,0,10">
+                              <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="38" />
+                              </Grid.ColumnDefinitions>
+                              <TextBlock Grid.Column="0" Text="音乐增益" FontSize="10" Foreground="{DynamicResource TextDim}" VerticalAlignment="Center" Margin="0,0,6,0" ToolTip="调整本首曲目音频与游戏内 BGM 响度倍率（20%–300%）" />
+                              <Slider x:Name="SldBgmGain" Grid.Column="1" Minimum="20" Maximum="300" Value="100" VerticalAlignment="Center" ValueChanged="SldBgmGain_ValueChanged" />
+                              <TextBlock x:Name="TxtBgmGain" Grid.Column="2" Text="100%" FontSize="10" Foreground="{DynamicResource TextSecondary}" HorizontalAlignment="Right" VerticalAlignment="Center" />
                             </Grid>
                             <Grid>
                               <Grid.ColumnDefinitions>
@@ -394,37 +426,105 @@
                               <Button Grid.Column="2" Focusable="False" Content="导入封面" FontSize="10.5" Padding="9,3.5" VerticalAlignment="Center" Click="BtnImportCover_Click" />
                             </Grid>
                           </StackPanel>
-                        </Border>
+                        </Expander>
 
-                        <Button x:Name="BtnRestoreOfficial" Focusable="False" Content="恢复官方原版（覆盖本地修改）" Visibility="Collapsed" FontSize="11" Padding="10,5" Style="{StaticResource GhostButton}" Click="BtnRestoreOfficial_Click" Margin="0,0,0,8" />
-                        <TextBlock Text="导入官方谱面作参考 / 模板" Style="{StaticResource FieldLabel}" Margin="0,0,0,4" />
-                        <Grid Margin="0,0,0,14">
-                          <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                          </Grid.ColumnDefinitions>
-                          <ComboBox x:Name="CmbOfficial" Grid.Column="0" Focusable="False" Margin="0,0,6,0" />
-                          <Button Grid.Column="1" Focusable="False" Content="导入" Padding="12,4" FontSize="11" Click="BtnImportOfficial_Click" />
-                        </Grid>
+                        <!-- 4. 自定义背景与构图（可折叠） -->
+                        <Expander x:Name="ExpCustomBg" Style="{StaticResource SectionExpander}" Header="自定义背景与构图 (图片 / 4K视频)" Tag="{DynamicResource AccentJump}" IsExpanded="False">
+                          <StackPanel>
+                            <Grid Margin="0,0,0,6">
+                              <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                              </Grid.ColumnDefinitions>
+                              <TextBlock x:Name="TxtBgStatus" Grid.Column="0" Text="背景：默认主题" FontSize="11" Foreground="{DynamicResource TextDim}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,6,0" />
+                              <Button Grid.Column="1" Focusable="False" Content="导入背景" FontSize="10.5" Padding="8,3" Margin="0,0,4,0" Click="BtnImportBg_Click" ToolTip="支持导入图片(.png/.jpg)或视频(.mp4/.webm)，最高支持 4K" />
+                              <Button x:Name="BtnClearBg" Grid.Column="2" Focusable="False" Content="清除" FontSize="10.5" Padding="7,3" Click="BtnClearBg_Click" IsEnabled="False" />
+                            </Grid>
+                            <Grid Margin="0,0,0,5">
+                              <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="34" />
+                              </Grid.ColumnDefinitions>
+                              <TextBlock Grid.Column="0" Text="压暗" FontSize="10" Foreground="{DynamicResource TextDim}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                              <Slider x:Name="SldBgDim" Grid.Column="1" Minimum="0" Maximum="90" Value="35" VerticalAlignment="Center" ValueChanged="SldBgDim_ValueChanged" />
+                              <TextBlock x:Name="TxtBgDim" Grid.Column="2" Text="35%" FontSize="10" Foreground="{DynamicResource TextSecondary}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                            </Grid>
+                            <Grid Margin="0,0,0,5">
+                              <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                              </Grid.ColumnDefinitions>
+                              <TextBlock Grid.Column="0" Text="视频偏移(秒)" FontSize="10" Foreground="{DynamicResource TextDim}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                              <TextBox x:Name="TxtBgOffset" Grid.Column="1" Text="0" Padding="5,2" FontSize="10.5" TextChanged="TxtBgOffset_TextChanged" ToolTip="视频相对音频的起始偏移秒数（正值提前、负值延后）" />
+                            </Grid>
+                            <Grid Margin="0,0,0,4">
+                              <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="38" />
+                              </Grid.ColumnDefinitions>
+                              <TextBlock Grid.Column="0" Text="缩放" FontSize="10" Foreground="{DynamicResource TextDim}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                              <Slider x:Name="SldBgScale" Grid.Column="1" Minimum="50" Maximum="250" Value="100" VerticalAlignment="Center" ValueChanged="SldBgTransform_ValueChanged" />
+                              <TextBlock x:Name="TxtBgScale" Grid.Column="2" Text="100%" FontSize="10" Foreground="{DynamicResource TextSecondary}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                            </Grid>
+                            <Grid Margin="0,0,0,4">
+                              <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="38" />
+                              </Grid.ColumnDefinitions>
+                              <TextBlock Grid.Column="0" Text="水平" FontSize="10" Foreground="{DynamicResource TextDim}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                              <Slider x:Name="SldBgPosX" Grid.Column="1" Minimum="-100" Maximum="100" Value="0" VerticalAlignment="Center" ValueChanged="SldBgTransform_ValueChanged" />
+                              <TextBlock x:Name="TxtBgPosX" Grid.Column="2" Text="0%" FontSize="10" Foreground="{DynamicResource TextSecondary}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                            </Grid>
+                            <Grid Margin="0,0,0,6">
+                              <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="38" />
+                              </Grid.ColumnDefinitions>
+                              <TextBlock Grid.Column="0" Text="垂直" FontSize="10" Foreground="{DynamicResource TextDim}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                              <Slider x:Name="SldBgPosY" Grid.Column="1" Minimum="-100" Maximum="100" Value="0" VerticalAlignment="Center" ValueChanged="SldBgTransform_ValueChanged" />
+                              <TextBlock x:Name="TxtBgPosY" Grid.Column="2" Text="0%" FontSize="10" Foreground="{DynamicResource TextSecondary}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                            </Grid>
+                            <Button Content="重置背景构图" Focusable="False" FontSize="10" Padding="6,2.5" HorizontalAlignment="Right" Click="BtnResetBgTransform_Click" />
+                          </StackPanel>
+                        </Expander>
 
-                        <Border Background="{DynamicResource CardHeaderBg}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="7" Margin="0,0,0,8" Padding="10,7">
-                          <DockPanel>
-                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                              <Button Content="+ 斜轨" Style="{StaticResource SmallPanelBtn}" Click="BtnAddAngledLayer_Click" Margin="0,0,4,0" ToolTip="一键新增一个带斜角的实验版轨道图层（如 +30°/-30°）" />
-                              <Button Content="+ 图层" Style="{StaticResource SmallPanelBtn}" Click="BtnAddLayer_Click" />
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                              <Border Width="3" Height="11" CornerRadius="1.5" Background="{DynamicResource AccentJump}" Margin="0,0,7,0" />
-                              <TextBlock Text="图层 · 斜轨实验" FontWeight="SemiBold" FontSize="11.5" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" />
-                            </StackPanel>
-                          </DockPanel>
-                        </Border>
-                        <Border Background="{DynamicResource BgCard}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="6" Margin="0,0,0,8" Padding="8,6">
-                          <DockPanel>
-                            <CheckBox x:Name="ChkSoloLayer" Content="独占模式（点击图层仅显示与修改该层）" IsChecked="True" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" ToolTip="开启后：点击任意图层卡片框，界面只显示并只允许修改该图层的音符，防止误选其他轨道" Click="ChkSoloLayer_Click" />
-                          </DockPanel>
-                        </Border>
-                        <StackPanel x:Name="LayersPanel" />
+                        <!-- 5. 图层 · 斜轨实验 -->
+                        <Expander x:Name="ExpLayers" Style="{StaticResource SectionExpander}" Header="图层 · 斜轨实验" Tag="{DynamicResource AccentJump}" IsExpanded="True">
+                          <StackPanel>
+                            <Grid Margin="0,0,0,8">
+                              <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                              </Grid.ColumnDefinitions>
+                              <CheckBox x:Name="ChkSoloLayer" Grid.Column="0" Content="独占该层" IsChecked="True" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" ToolTip="开启后：点击任意图层卡片框，界面只显示并只允许修改该图层的音符，防止误选其他轨道" Click="ChkSoloLayer_Click" />
+                              <Button Grid.Column="1" Content="+ 斜轨" Style="{StaticResource SmallPanelBtn}" Click="BtnAddAngledLayer_Click" Margin="0,0,4,0" ToolTip="一键新增一个带斜角的实验版轨道图层（如 +30°/-30°）" />
+                              <Button Grid.Column="2" Content="+ 图层" Style="{StaticResource SmallPanelBtn}" Click="BtnAddLayer_Click" />
+                            </Grid>
+                            <StackPanel x:Name="LayersPanel" />
+                          </StackPanel>
+                        </Expander>
+
+                        <!-- 6. 官方谱面模板 / 恢复（可折叠） -->
+                        <Expander x:Name="ExpOfficialRef" Style="{StaticResource SectionExpander}" Header="官方谱面模板 / 恢复" Tag="{DynamicResource TextSecondary}" IsExpanded="False">
+                          <StackPanel>
+                            <Button x:Name="BtnRestoreOfficial" Focusable="False" Content="恢复官方原版（覆盖本地修改）" Visibility="Collapsed" FontSize="11" Padding="10,5" Style="{StaticResource GhostButton}" Click="BtnRestoreOfficial_Click" Margin="0,0,0,8" />
+                            <TextBlock Text="导入官方谱面作参考 / 模板" Style="{StaticResource FieldLabel}" Margin="0,0,0,4" />
+                            <Grid>
+                              <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                              </Grid.ColumnDefinitions>
+                              <ComboBox x:Name="CmbOfficial" Grid.Column="0" Focusable="False" Margin="0,0,6,0" />
+                              <Button Grid.Column="1" Focusable="False" Content="导入" Padding="12,4" FontSize="11" Click="BtnImportOfficial_Click" />
+                            </Grid>
+                          </StackPanel>
+                        </Expander>
                       </StackPanel>
                     </StackPanel>
                   </ScrollViewer>
@@ -490,8 +590,16 @@
             </DockPanel>
           </Border>
           <Grid x:Name="PreviewCanvasHost" Grid.Row="1">
-            <Image x:Name="PreviewBgImage" Stretch="Fill" IsHitTestVisible="False" />
-            <ctrl:PlayfieldPreviewControl x:Name="Playfield" />
+            <Grid x:Name="PreviewStageLayer" ClipToBounds="True" SizeChanged="PreviewStageLayer_SizeChanged">
+              <Image x:Name="PreviewBgImage" Stretch="Fill" IsHitTestVisible="False" />
+              <Image x:Name="PreviewCustomBgImage" Stretch="UniformToFill" RenderTransformOrigin="0.5,0.5" IsHitTestVisible="False" Visibility="Collapsed" />
+              <MediaElement x:Name="PreviewCustomBgVideo" LoadedBehavior="Manual" UnloadedBehavior="Manual" IsMuted="True" ScrubbingEnabled="True" Stretch="UniformToFill" RenderTransformOrigin="0.5,0.5" RenderOptions.BitmapScalingMode="LowQuality" IsHitTestVisible="False" Visibility="Collapsed" MediaFailed="PreviewCustomBgVideo_MediaFailed" />
+              <Rectangle x:Name="PreviewCustomBgDim" Fill="Black" Opacity="0.35" IsHitTestVisible="False" Visibility="Collapsed" />
+              <Border x:Name="PreviewViewportGuide" BorderBrush="#CCF5C451" BorderThickness="1.5" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False" Visibility="Collapsed">
+                <TextBlock Text="16:9 游戏画面参考框" FontSize="9.5" Foreground="#FFF5C451" Background="#88000000" Padding="5,2" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="4" />
+              </Border>
+              <ctrl:PlayfieldPreviewControl x:Name="Playfield" />
+            </Grid>
             <Border x:Name="PreviewPopoutHint" Visibility="Collapsed" Background="{DynamicResource BgCard}">
               <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                 <TextBlock Text="画面预览已弹出为独立窗口" FontSize="13" Foreground="{DynamicResource TextSecondary}" HorizontalAlignment="Center" />
@@ -585,9 +693,10 @@
                   <Border Grid.Row="0" Background="{DynamicResource CardHeaderBg}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="14,9">
                     <DockPanel>
                       <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Border Background="{DynamicResource PillBg}" BorderBrush="{DynamicResource BorderLight}" BorderThickness="1" CornerRadius="5" Padding="7,2" Margin="0,0,7,0">
+                        <Border Background="{DynamicResource PillBg}" BorderBrush="{DynamicResource BorderLight}" BorderThickness="1" CornerRadius="5" Padding="7,2" Margin="0,0,6,0">
                           <TextBlock x:Name="TxtLevelBadge" Text="难度 —" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource AccentGold}" VerticalAlignment="Center" />
                         </Border>
+                        <Button x:Name="BtnFoldHealth" Content="▾ 收起" Focusable="False" Style="{StaticResource CollapsePillBtn}" Click="BtnToggleFold_Click" Tag="health" Margin="0,0,6,0" ToolTip="折叠 / 展开谱面体检内容" />
                         <Button Content="拆出" Focusable="False" Style="{StaticResource SmallPanelBtn}" Click="BtnPopPanel_Click" Tag="health" Margin="0,0,5,0" ToolTip="把谱面体检拆成独立窗口" />
                         <Button Content="关闭" Focusable="False" Style="{StaticResource SmallPanelBtn}" Click="BtnClosePanel_Click" Tag="health" ToolTip="关闭谱面体检（可在顶栏「面板」中重新打开）" />
                       </StackPanel>
@@ -597,7 +706,7 @@
                       </StackPanel>
                     </DockPanel>
                   </Border>
-                  <StackPanel Grid.Row="1" Margin="14,12,14,12">
+                  <StackPanel x:Name="HealthBody" Grid.Row="1" Margin="14,12,14,12">
                     <Grid Margin="0,0,0,8">
                       <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
@@ -667,18 +776,12 @@
                   <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                     <StackPanel x:Name="InspectorPanel" Margin="14,12,14,16" />
                   </ScrollViewer>
-                  <StackPanel Grid.Row="2">
-                    <Border Background="{DynamicResource CardHeaderBg}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,1" Padding="14,8">
-                      <StackPanel Orientation="Horizontal">
-                        <Border Width="3" Height="12" CornerRadius="1.5" Background="{DynamicResource AccentGold}" Margin="0,0,8,0" />
-                        <TextBlock Text="在指针处添加演出事件" Style="{StaticResource SectionTitle}" TextTrimming="CharacterEllipsis" />
-                      </StackPanel>
-                    </Border>
-                    <StackPanel Margin="14,10,14,12">
+                  <Expander Grid.Row="2" Style="{StaticResource SectionExpander}" Header="在指针处添加演出事件" Tag="{DynamicResource AccentGold}" IsExpanded="True" Margin="8,6,8,8">
+                    <StackPanel>
                       <ComboBox x:Name="CmbNewEvent" Focusable="False" SelectedIndex="1" Margin="0,0,0,8" />
                       <Button Content="添加到指针位置" Focusable="False" Style="{StaticResource PrimaryButton}" Padding="10,6" Click="BtnAddEventAtPlayhead_Click" FontWeight="SemiBold" />
                     </StackPanel>
-                  </StackPanel>
+                  </Expander>
                 </Grid>
               </Border>
               <Border x:Name="InspectorPopoutHint" Background="{DynamicResource BgCard}" Visibility="Collapsed">

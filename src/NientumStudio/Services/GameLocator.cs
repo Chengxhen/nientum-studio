@@ -74,8 +74,10 @@ namespace NientumStudio.Services
                 }
             }
             catch { }
-            // 兜底：Steam 默认安装路径（其余库通过注册表与 libraryfolders.vdf 发现）
+            list.Add(@"F:\SteamLibrary\steamapps\common\Liora");
             list.Add(@"C:\Program Files (x86)\Steam\steamapps\common\Liora");
+            list.Add(@"D:\SteamLibrary\steamapps\common\Liora");
+            list.Add(@"E:\SteamLibrary\steamapps\common\Liora");
             return list;
         }
     }

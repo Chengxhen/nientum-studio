@@ -48,7 +48,6 @@ namespace NientumStudio
         private readonly System.Windows.Threading.DispatcherTimer _longPressTimer =
             new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(380) };
         private Window _previewPopup;
-        private Image _previewPopupBg;
         private Window _timelinePopup;
         private bool _closing;
         private bool _applyingSettings;
@@ -98,6 +97,7 @@ namespace NientumStudio
             Timeline.GetPlayTime = () => _playTime;
             Timeline.GetDuration = () => _duration;
             Timeline.GetDefaultBpm = () => _currentSong?.Meta?.bpm ?? 120.0;
+            Timeline.GetDefaultBeat = () => Math.Clamp(_currentSong?.Meta?.defaultBeat ?? 4, 1, 16);
             Timeline.GetWaveform = () => EditorSettings.Current.ShowWaveform ? _waveform : null;
             Timeline.GetAudioName = () =>
             {
@@ -472,6 +472,7 @@ namespace NientumStudio
             // 命中音效在本帧触发后同步提交 Studio 命令，减少一帧的启动延迟
             _officialAudio.Update();
             _fmod.Update();
+            SyncCustomBgVideo(playing, false);
         }
 
         private void RequestRedraw() => _uiDirty = true;
@@ -668,6 +669,7 @@ namespace NientumStudio
                 _officialAudio.Seek(_playTime);
                 _officialSeekGuard = 3;
             }
+            SyncCustomBgVideo(_wasPlaying, true);
             Timeline.InvalidateVisual();
             InvalidatePreview();
             RequestRedraw();
@@ -760,13 +762,34 @@ namespace NientumStudio
                 TxtBpm.Text = m.bpm.ToString(CultureInfo.InvariantCulture);
                 TxtOffsetMs.Text = m.offsetMs.ToString(CultureInfo.InvariantCulture);
                 TxtPreviewSec.Text = m.previewStartSec.ToString(CultureInfo.InvariantCulture);
+                int defBeat = Math.Clamp(m.defaultBeat > 0 ? m.defaultBeat : 4, 1, 16);
+                m.defaultBeat = defBeat;
+                CmbDefaultBeat.Text = defBeat.ToString(CultureInfo.InvariantCulture);
+                TxtGridBeatsPerBar.Text = defBeat.ToString(CultureInfo.InvariantCulture);
+                SldBgDim.Value = Math.Clamp(m.bgDim * 100.0, 0, 90);
+                TxtBgDim.Text = $"{(int)Math.Round(SldBgDim.Value)}%";
+                TxtBgOffset.Text = m.bgVideoOffsetSec.ToString(CultureInfo.InvariantCulture);
+                double sc = Math.Clamp((m.bgScale > 0.01f ? m.bgScale : 1f) * 100.0, 50, 250);
+                SldBgScale.Value = sc;
+                TxtBgScale.Text = $"{(int)Math.Round(sc)}%";
+                double px = Math.Clamp(m.bgPosX, -100, 100);
+                SldBgPosX.Value = px;
+                TxtBgPosX.Text = $"{(int)Math.Round(px)}%";
+                double py = Math.Clamp(m.bgPosY, -100, 100);
+                SldBgPosY.Value = py;
+                TxtBgPosY.Text = $"{(int)Math.Round(py)}%";
+                double gainPct = Math.Clamp((m.bgmGain > 0.01f ? m.bgmGain : 1f) * 100.0, 20, 300);
+                SldBgmGain.Value = gainPct;
+                TxtBgmGain.Text = $"{(int)Math.Round(gainPct)}%";
             }
             finally
             {
                 _loadingSong = false;
             }
 
+            ApplySongVolume();
             UpdateCoverPreview();
+            LoadCustomBgForCurrentSong();
             LoadDifficulty("normal");
             _ = LoadAudioForCurrentSongAsync();
         }
@@ -958,6 +981,13 @@ namespace NientumStudio
             if (float.TryParse(TxtBpm.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out float bpm) && bpm > 10) m.bpm = bpm;
             if (float.TryParse(TxtOffsetMs.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out float off)) m.offsetMs = off;
             if (float.TryParse(TxtPreviewSec.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out float prev)) m.previewStartSec = prev;
+            if (int.TryParse(CmbDefaultBeat.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int db)) m.defaultBeat = Math.Clamp(db, 1, 16);
+            m.bgDim = (float)Math.Clamp(SldBgDim.Value / 100.0, 0.0, 0.9);
+            if (float.TryParse(TxtBgOffset.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out float bgo)) m.bgVideoOffsetSec = bgo;
+            m.bgScale = (float)Math.Clamp(SldBgScale.Value / 100.0, 0.5, 2.5);
+            m.bgPosX = (float)Math.Clamp(SldBgPosX.Value, -100.0, 100.0);
+            m.bgPosY = (float)Math.Clamp(SldBgPosY.Value, -100.0, 100.0);
+            m.bgmGain = (float)Math.Clamp(SldBgmGain.Value / 100.0, 0.2, 3.0);
 
             m.difficulties ??= new DifficultiesMap();
             var dm = GetDiffMeta(m, _currentDiff);
@@ -1990,6 +2020,401 @@ namespace NientumStudio
             }
         }
 
+        private double GetCurrentPlayRate() =>
+            (CmbRate?.SelectedItem is ComboBoxItem ci && double.TryParse(ci.Tag?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out double r)) ? r : 1.0;
+
+        private bool _hasCustomVideoBg;
+        private bool _customVideoPlaying;
+        private long _lastVideoSeekMs;
+
+        private static bool IsVideoExtension(string ext) =>
+            ext == ".mp4" || ext == ".webm" || ext == ".mov";
+
+        private void UnloadCustomBg()
+        {
+            _hasCustomVideoBg = false;
+            _customVideoPlaying = false;
+            try
+            {
+                PreviewCustomBgVideo.Stop();
+                PreviewCustomBgVideo.Source = null;
+            }
+            catch { }
+            PreviewCustomBgVideo.Visibility = Visibility.Collapsed;
+            PreviewCustomBgImage.Source = null;
+            PreviewCustomBgImage.Visibility = Visibility.Collapsed;
+            PreviewCustomBgDim.Visibility = Visibility.Collapsed;
+            if (PreviewViewportGuide != null) PreviewViewportGuide.Visibility = Visibility.Collapsed;
+        }
+
+        private void UpdateViewportGuide()
+        {
+            if (PreviewViewportGuide == null || PreviewStageLayer == null) return;
+            bool hasCustom = PreviewCustomBgImage.Visibility == Visibility.Visible || PreviewCustomBgVideo.Visibility == Visibility.Visible;
+            if (!hasCustom)
+            {
+                PreviewViewportGuide.Visibility = Visibility.Collapsed;
+                return;
+            }
+            double w = PreviewStageLayer.ActualWidth;
+            double h = PreviewStageLayer.ActualHeight;
+            if (w <= 10 || h <= 10) return;
+
+            double targetW = w;
+            double targetH = w * 9.0 / 16.0;
+            if (targetH > h)
+            {
+                targetH = h;
+                targetW = h * 16.0 / 9.0;
+            }
+            PreviewViewportGuide.Width = Math.Max(40, targetW - 2);
+            PreviewViewportGuide.Height = Math.Max(40, targetH - 2);
+            PreviewViewportGuide.Visibility = Visibility.Visible;
+        }
+
+        private void ApplyCustomBgTransform()
+        {
+            if (SldBgScale == null || SldBgPosX == null || SldBgPosY == null) return;
+            double scale = Math.Clamp(SldBgScale.Value / 100.0, 0.5, 2.5);
+            double px = Math.Clamp(SldBgPosX.Value, -100.0, 100.0);
+            double py = Math.Clamp(SldBgPosY.Value, -100.0, 100.0);
+
+            double refW = PreviewStageLayer?.ActualWidth > 10 ? PreviewStageLayer.ActualWidth : 960;
+            double refH = PreviewStageLayer?.ActualHeight > 10 ? PreviewStageLayer.ActualHeight : 540;
+            double tx = (px / 100.0) * refW * 0.5;
+            double ty = -(py / 100.0) * refH * 0.5;
+
+            var tg = new TransformGroup();
+            tg.Children.Add(new ScaleTransform(scale, scale));
+            tg.Children.Add(new TranslateTransform(tx, ty));
+            tg.Freeze();
+
+            if (PreviewCustomBgImage != null) PreviewCustomBgImage.RenderTransform = tg;
+            if (PreviewCustomBgVideo != null) PreviewCustomBgVideo.RenderTransform = tg;
+        }
+
+        private void PreviewStageLayer_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            UpdateViewportGuide();
+            ApplyCustomBgTransform();
+        }
+
+        private void SldBgTransform_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (TxtBgScale == null || TxtBgPosX == null || TxtBgPosY == null) return;
+            TxtBgScale.Text = $"{(int)Math.Round(SldBgScale.Value)}%";
+            TxtBgPosX.Text = $"{(int)Math.Round(SldBgPosX.Value)}%";
+            TxtBgPosY.Text = $"{(int)Math.Round(SldBgPosY.Value)}%";
+            ApplyCustomBgTransform();
+            if (_loadingSong || _currentSong?.Meta == null) return;
+            _currentSong.Meta.bgScale = (float)Math.Clamp(SldBgScale.Value / 100.0, 0.5, 2.5);
+            _currentSong.Meta.bgPosX = (float)Math.Clamp(SldBgPosX.Value, -100.0, 100.0);
+            _currentSong.Meta.bgPosY = (float)Math.Clamp(SldBgPosY.Value, -100.0, 100.0);
+            MarkDirty();
+        }
+
+        private void BtnResetBgTransform_Click(object sender, RoutedEventArgs e)
+        {
+            SldBgScale.Value = 100;
+            SldBgPosX.Value = 0;
+            SldBgPosY.Value = 0;
+            ApplyCustomBgTransform();
+        }
+
+        private void SldBgmGain_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (TxtBgmGain == null) return;
+            TxtBgmGain.Text = $"{(int)Math.Round(SldBgmGain.Value)}%";
+            ApplySongVolume();
+            if (_loadingSong || _currentSong?.Meta == null) return;
+            _currentSong.Meta.bgmGain = (float)Math.Clamp(SldBgmGain.Value / 100.0, 0.2, 3.0);
+            MarkDirty();
+        }
+
+        private void ApplySongVolume()
+        {
+            float gain = (_currentSong?.Meta != null && _currentSong.Meta.bgmGain > 0.01f)
+                ? Math.Clamp(_currentSong.Meta.bgmGain, 0.2f, 3.0f)
+                : (SldBgmGain != null ? (float)Math.Clamp(SldBgmGain.Value / 100.0, 0.2, 3.0) : 1.0f);
+            _fmod.SetVolume((float)EditorSettings.Current.MasterVolume * gain);
+        }
+
+        private void LoadCustomBgForCurrentSong()
+        {
+            UnloadCustomBg();
+            if (_currentSong?.Meta == null)
+            {
+                TxtBgStatus.Text = "背景：默认主题";
+                BtnClearBg.IsEnabled = false;
+                return;
+            }
+            var m = _currentSong.Meta;
+            string bgFile = m.bgFile;
+            string fullPath = string.IsNullOrEmpty(bgFile) ? null : Path.Combine(_currentSong.FolderPath, bgFile);
+            if (string.IsNullOrEmpty(fullPath) || !File.Exists(fullPath))
+            {
+                TxtBgStatus.Text = "背景：默认主题";
+                BtnClearBg.IsEnabled = false;
+                return;
+            }
+
+            BtnClearBg.IsEnabled = true;
+            TxtBgStatus.Text = $"背景：{bgFile}";
+            PreviewCustomBgDim.Opacity = Math.Clamp(m.bgDim, 0f, 0.9f);
+            PreviewCustomBgDim.Visibility = Visibility.Visible;
+
+            string ext = Path.GetExtension(fullPath).ToLowerInvariant();
+            if (IsVideoExtension(ext))
+            {
+                try
+                {
+                    _hasCustomVideoBg = true;
+                    PreviewCustomBgVideo.Source = new Uri(fullPath, UriKind.Absolute);
+                    PreviewCustomBgVideo.Visibility = Visibility.Visible;
+                    PreviewCustomBgVideo.SpeedRatio = GetCurrentPlayRate();
+                    PreviewCustomBgVideo.Play();
+                    PreviewCustomBgVideo.Pause();
+                    SyncCustomBgVideo(false, true);
+                    UpdateViewportGuide();
+                    ApplyCustomBgTransform();
+                    AppLog.Info($"Loaded custom video bg: {fullPath}");
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Error("Failed to load custom video bg", ex);
+                    UnloadCustomBg();
+                    TxtBgStatus.Text = "背景：视频加载失败";
+                }
+            }
+            else
+            {
+                try
+                {
+                    var bmp = new BitmapImage();
+                    bmp.BeginInit();
+                    bmp.CacheOption = BitmapCacheOption.OnLoad;
+                    bmp.DecodePixelWidth = 1920;
+                    bmp.UriSource = new Uri(fullPath, UriKind.Absolute);
+                    bmp.EndInit();
+                    bmp.Freeze();
+                    PreviewCustomBgImage.Source = bmp;
+                    PreviewCustomBgImage.Visibility = Visibility.Visible;
+                    UpdateViewportGuide();
+                    ApplyCustomBgTransform();
+                    AppLog.Info($"Loaded custom image bg: {fullPath}");
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Error("Failed to load custom image bg", ex);
+                    UnloadCustomBg();
+                    TxtBgStatus.Text = "背景：图片加载失败";
+                }
+            }
+        }
+
+        private void SyncCustomBgVideo(bool playing, bool forceSeek)
+        {
+            if (!_hasCustomVideoBg || _currentSong?.Meta == null) return;
+            try
+            {
+                double targetSec = Math.Max(0.0, _playTime + _currentSong.Meta.bgVideoOffsetSec);
+                double baseRate = GetCurrentPlayRate();
+                long nowMs = Environment.TickCount64;
+
+                if (playing)
+                {
+                    if (!_customVideoPlaying)
+                    {
+                        PreviewCustomBgVideo.SpeedRatio = baseRate;
+                        PreviewCustomBgVideo.Play();
+                        _customVideoPlaying = true;
+                        double initCur = PreviewCustomBgVideo.Position.TotalSeconds;
+                        if (forceSeek || Math.Abs(initCur - targetSec) > 0.35)
+                        {
+                            _lastVideoSeekMs = nowMs;
+                            PreviewCustomBgVideo.Position = TimeSpan.FromSeconds(targetSec);
+                        }
+                        return;
+                    }
+
+                    double cur = PreviewCustomBgVideo.Position.TotalSeconds;
+                    double diff = targetSec - cur;
+                    double absDiff = Math.Abs(diff);
+
+                    if (forceSeek)
+                    {
+                        _lastVideoSeekMs = nowMs;
+                        PreviewCustomBgVideo.SpeedRatio = baseRate;
+                        PreviewCustomBgVideo.Position = TimeSpan.FromSeconds(targetSec);
+                    }
+                    else if (absDiff <= 0.25)
+                    {
+                        if (Math.Abs(PreviewCustomBgVideo.SpeedRatio - baseRate) > 0.01)
+                            PreviewCustomBgVideo.SpeedRatio = baseRate;
+                    }
+                    else if (absDiff <= 0.75)
+                    {
+                        // 温和倍速微调追帧，避免 4K H.265 频繁硬 Seek 卡死 UI
+                        double adjRate = Math.Clamp(baseRate * (diff > 0 ? 1.06 : 0.94), 0.1, 4.0);
+                        if (Math.Abs(PreviewCustomBgVideo.SpeedRatio - adjRate) > 0.01)
+                            PreviewCustomBgVideo.SpeedRatio = adjRate;
+                    }
+                    else if (nowMs - _lastVideoSeekMs >= 1800)
+                    {
+                        _lastVideoSeekMs = nowMs;
+                        PreviewCustomBgVideo.SpeedRatio = baseRate;
+                        PreviewCustomBgVideo.Position = TimeSpan.FromSeconds(targetSec);
+                    }
+                }
+                else
+                {
+                    if (Math.Abs(PreviewCustomBgVideo.SpeedRatio - baseRate) > 0.01)
+                        PreviewCustomBgVideo.SpeedRatio = baseRate;
+                    if (_customVideoPlaying)
+                    {
+                        PreviewCustomBgVideo.Pause();
+                        _customVideoPlaying = false;
+                    }
+                    if (forceSeek && nowMs - _lastVideoSeekMs >= 120)
+                    {
+                        _lastVideoSeekMs = nowMs;
+                        PreviewCustomBgVideo.Position = TimeSpan.FromSeconds(targetSec);
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private void PreviewCustomBgVideo_MediaFailed(object sender, ExceptionRoutedEventArgs e)
+        {
+            AppLog.Error("PreviewCustomBgVideo MediaFailed", e?.ErrorException);
+            UnloadCustomBg();
+            TxtBgStatus.Text = "背景：视频编码不支持";
+            MessageBox.Show(this,
+                "当前系统无法解码该视频格式（常见于 4K HEVC/H.265 或 AV1 未安装系统解码扩展）。\n\n建议转换为 H.264 (AVC) 编码的 MP4 后重新导入。",
+                "视频解码失败", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+
+        private async void BtnImportBg_Click(object sender, RoutedEventArgs e)
+        {
+            var owner = Window.GetWindow(sender as DependencyObject) ?? this;
+            if (_currentSong == null)
+            {
+                MessageBox.Show(owner, "请先在左侧新建或选择一首曲目，再导入自定义背景。", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            var dlg = new OpenFileDialog
+            {
+                Title = "选择自定义背景（支持 4K 图片/视频）",
+                Filter = "图片与视频|*.png;*.jpg;*.jpeg;*.bmp;*.mp4;*.webm;*.mov|图片文件|*.png;*.jpg;*.jpeg;*.bmp|视频文件|*.mp4;*.webm;*.mov"
+            };
+            if (dlg.ShowDialog(owner) == true)
+            {
+                try
+                {
+                    UnloadCustomBg();
+                    string ext = Path.GetExtension(dlg.FileName).ToLowerInvariant();
+                    string destName = "bg" + ext;
+                    string destPath = Path.Combine(_currentSong.FolderPath, destName);
+                    SafeCopyFile(dlg.FileName, destPath);
+                    _currentSong.Meta.bgFile = destName;
+                    _currentSong.Meta.bgDim = (float)Math.Clamp(SldBgDim.Value / 100.0, 0.0, 0.9);
+                    ChartStorage.SaveMeta(_currentSong.FolderPath, _currentSong.Meta);
+                    LoadCustomBgForCurrentSong();
+                    SetStatus($"已导入自定义背景：{destName}");
+
+                    if (IsVideoExtension(ext))
+                    {
+                        var ask = MessageBox.Show(owner,
+                            "是否同时提取该视频中的音频作为当前曲目的 BGM？",
+                            "提取视频音频", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                        if (ask == MessageBoxResult.Yes)
+                        {
+                            SetStatus("正在从视频提取音轨...");
+                            _fmod.UnloadSong();
+                            var (wav, dur) = await System.Threading.Tasks.Task.Run(() =>
+                            {
+                                byte[] bytes = Audio.MediaFoundationDecoder.DecodeToWav48k16BitStereo(destPath, out double d);
+                                return (bytes, d);
+                            });
+
+                            if (wav != null && wav.Length > 44)
+                            {
+                                string wavPath = Path.Combine(_currentSong.FolderPath, "song.wav");
+                                await File.WriteAllBytesAsync(wavPath, wav);
+                                _currentSong.Meta.audioFile = "song.wav";
+                                ChartStorage.SaveMeta(_currentSong.FolderPath, _currentSong.Meta);
+                                RefreshSongListOnly();
+                                await LoadAudioForCurrentSongAsync();
+                                SetStatus($"已导入背景并提取音频：song.wav ({dur:F1}s)");
+                                AppLog.Info($"Extracted audio from video bg: {destPath} -> song.wav ({dur:F2}s)");
+                            }
+                            else
+                            {
+                                AppLog.Warn($"No usable audio track extracted from video: {destPath}");
+                                MessageBox.Show(owner,
+                                    "未在该视频中检测到可用音轨（或音频格式不支持），已仅导入背景画面。",
+                                    "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                                SetStatus($"已导入背景：{destName}（无可用音轨）");
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Error("BtnImportBg_Click failed", ex);
+                    SetStatus("导入背景失败：" + ex.Message);
+                }
+            }
+        }
+
+        private void BtnClearBg_Click(object sender, RoutedEventArgs e)
+        {
+            if (_currentSong?.Meta == null) return;
+            UnloadCustomBg();
+            _currentSong.Meta.bgFile = "";
+            ChartStorage.SaveMeta(_currentSong.FolderPath, _currentSong.Meta);
+            LoadCustomBgForCurrentSong();
+            SetStatus("已恢复默认场景背景");
+        }
+
+        private void SldBgDim_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (TxtBgDim == null) return;
+            int pct = (int)Math.Round(SldBgDim.Value);
+            TxtBgDim.Text = $"{pct}%";
+            PreviewCustomBgDim.Opacity = Math.Clamp(pct / 100.0, 0.0, 0.9);
+            if (_loadingSong || _currentSong?.Meta == null) return;
+            _currentSong.Meta.bgDim = (float)Math.Clamp(pct / 100.0, 0.0, 0.9);
+            MarkDirty();
+        }
+
+        private void TxtBgOffset_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (_loadingSong || _currentSong?.Meta == null) return;
+            if (float.TryParse(TxtBgOffset.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out float v))
+            {
+                _currentSong.Meta.bgVideoOffsetSec = v;
+                SyncCustomBgVideo(_wasPlaying, true);
+                MarkDirty();
+            }
+        }
+
+        private void CmbDefaultBeat_Changed(object sender, EventArgs e)
+        {
+            if (_loadingSong || _currentSong?.Meta == null) return;
+            string raw = (CmbDefaultBeat.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? CmbDefaultBeat.Text;
+            if (int.TryParse(raw?.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int beat))
+            {
+                beat = Math.Clamp(beat, 1, 16);
+                _currentSong.Meta.defaultBeat = beat;
+                TxtGridBeatsPerBar.Text = beat.ToString(CultureInfo.InvariantCulture);
+                Timeline.InvalidateVisual();
+                Playfield.InvalidateVisual();
+                MarkDirty();
+            }
+        }
+
         private void BtnImportOfficial_Click(object sender, RoutedEventArgs e)
         {
             if (_currentSong == null || CmbOfficial.SelectedItem is not string name) return;
@@ -2633,7 +3058,7 @@ namespace NientumStudio
             SetPanelChecked("health", s.PanelHealth);
             SetPanelChecked("inspector", s.PanelInspector);
             ApplyPanelVisibility();
-            _fmod.SetVolume((float)s.MasterVolume);
+            ApplySongVolume();
             _fmod.SetHitsoundVolume((float)s.HitsoundVolume);
             _fmod.SetMetronomeVolume((float)s.MetronomeVolume);
             _officialAudio.SetVolume((float)s.MasterVolume);
@@ -2868,7 +3293,6 @@ namespace NientumStudio
         private void UpdatePreviewBackgrounds()
         {
             if (PreviewBgImage != null) PreviewBgImage.Source = Playfield.BackgroundImage;
-            if (_previewPopupBg != null) _previewPopupBg.Source = Playfield.BackgroundImage;
         }
 
         private void BtnPopPreview_Click(object sender, RoutedEventArgs e) => PopOutPreview();
@@ -2879,21 +3303,17 @@ namespace NientumStudio
         private void PopOutPreview()
         {
             if (_previewPopup != null) { _previewPopup.Activate(); return; }
-            if (Playfield.Parent is Panel host) host.Children.Remove(Playfield);
+            if (PreviewStageLayer.Parent is Panel host) host.Children.Remove(PreviewStageLayer);
             PreviewPopoutHint.Visibility = Visibility.Visible;
-            var canvas = new Grid();
-            _previewPopupBg = new Image { Stretch = Stretch.Fill, IsHitTestVisible = false, Source = Playfield.BackgroundImage };
-            canvas.Children.Add(_previewPopupBg);
-            canvas.Children.Add(Playfield);
             var win = new Window
             {
-                Title = "画面预览 · Nientum Studio",
+                Title = "画面预览 (16:9) · Nientum Studio",
                 Width = 1120,
-                Height = 480,
+                Height = 630,
                 MinWidth = 480,
-                MinHeight = 240,
+                MinHeight = 270,
                 Owner = this,
-                Content = canvas,
+                Content = PreviewStageLayer,
                 WindowStartupLocation = WindowStartupLocation.Manual,
                 Left = Math.Max(0, Left + 70),
                 Top = Math.Max(0, Top + 90)
@@ -2903,7 +3323,16 @@ namespace NientumStudio
             win.PreviewKeyDown += (_, e2) => { if (!e2.Handled) Window_PreviewKeyDown(this, e2); };
             _previewPopup = win;
             win.Show();
-            RequestRedraw();
+            SyncCustomBgVideo(_wasPlaying, false);
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, new Action(() =>
+            {
+                if (_previewPopup == win)
+                {
+                    UpdateViewportGuide();
+                    ApplyCustomBgTransform();
+                    RequestRedraw();
+                }
+            }));
         }
 
         private void DockPreview()
@@ -2911,20 +3340,39 @@ namespace NientumStudio
             if (_previewPopup == null) return;
             var content = _previewPopup.Content;
             _previewPopup.Content = null;
-            _previewPopupBg = null;
-            if (!_closing && content is Grid canvas)
+            if (!_closing && content is UIElement stage)
             {
-                var pf = canvas.Children.OfType<PlayfieldPreviewControl>().FirstOrDefault();
-                if (pf != null)
-                {
-                    canvas.Children.Remove(pf);
-                    PreviewCanvasHost.Children.Insert(1, pf);
-                }
+                if (!PreviewCanvasHost.Children.Contains(stage))
+                    PreviewCanvasHost.Children.Insert(0, stage);
                 PreviewPopoutHint.Visibility = Visibility.Collapsed;
             }
             _previewPopup = null;
-            UpdatePreviewBackgrounds();
-            RequestRedraw();
+            SyncCustomBgVideo(_wasPlaying, false);
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, new Action(() =>
+            {
+                if (!_closing)
+                {
+                    UpdatePreviewBackgrounds();
+                    UpdateViewportGuide();
+                    ApplyCustomBgTransform();
+                    RequestRedraw();
+                }
+            }));
+        }
+
+        private void BtnToggleFold_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button btn || btn.Tag is not string key) return;
+            FrameworkElement body = key switch
+            {
+                "library" => LibraryBody,
+                "health" => HealthBody,
+                _ => null
+            };
+            if (body == null) return;
+            bool collapsed = body.Visibility == Visibility.Visible;
+            body.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
+            btn.Content = collapsed ? "▸ 展开" : "▾ 收起";
         }
 
         private void PopOutTimeline()
